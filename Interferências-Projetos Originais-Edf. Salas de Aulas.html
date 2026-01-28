@@ -349,7 +349,7 @@
 
     // Mapeamento de disciplinas para nomes legíveis
     const disciplineNames = {
-      'ARC': 'HVAC/Dreno',
+      'ARC': 'HVAC',
       'INC': 'Incêndio',
       'SPRK': 'Sprinklers',
       'INC/SPRK': 'Incêndio/Sprinklers',
@@ -600,7 +600,7 @@
         '<li>A disciplina <span class="highlight-yellow">' + (disciplineNames[topDiscipline[0]] || topDiscipline[0]) + '</span> está envolvida em ' + topDiscipline[1].toLocaleString('pt-BR') + ' interferências (maior impacto)</li>' +
         '<li>Os <span class="highlight-orange">5 pares mais críticos</span> representam ' + top5Percent + '% do total (' + top5Total.toLocaleString('pt-BR') + ' interferências)</li>' +
         '<li>Interferências envolvendo <span class="highlight-yellow">Estrutural (EST)</span> requerem atenção especial por serem elementos de difícil modificação</li>' +
-        '<li>O sistema <span class="highlight-red">HVAC/Dreno (ARC)</span> apresenta o maior número de conflitos - revisar rotas de dutos</li>' +
+        '<li>O sistema <span class="highlight-red">HVAC (ARC)</span> apresenta o maior número de conflitos - revisar rotas de dutos</li>' +
         '<li>O <span class="highlight-green">par HID x PLU não apresenta interferências</span> - boa coordenação entre sistemas hidráulicos</li>' +
         '<li>Recomenda-se priorizar a resolução das interferências dos pares mais críticos antes de prosseguir com a obra</li>';
     }
