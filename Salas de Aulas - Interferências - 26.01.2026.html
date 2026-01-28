@@ -735,7 +735,7 @@
                 label: function(context) {
                   const total = context.dataset.data.reduce((a, b) => a + b, 0);
                   const percent = ((context.raw / total) * 100).toFixed(1);
-                  return context.label + ': ' + context.raw.toLocaleString('pt-BR') + ' (' + percent + '%)';
+                  return context.label + ': ' + percent + '%';
                 }
               }
             }
@@ -804,8 +804,8 @@
         '<li>Total de <span class="highlight-orange">' + totalClashes.toLocaleString('pt-BR') + ' interferências</span> identificadas em ' + totalPairs + ' pares de disciplinas</li>' +
         '<li>O par mais crítico é <span class="highlight-red">' + maxClash.name + '</span> com ' + maxClash.clashes + ' interferências - prioridade máxima de resolução</li>' +
         '<li>A disciplina <span class="highlight-yellow">' + (disciplineNames[topDiscipline[0]] || topDiscipline[0]) + '</span> está envolvida em ' + topDiscipline[1].toLocaleString('pt-BR') + ' interferências (maior impacto)</li>' +
-        '<li>Disciplinas de <span class="highlight-green">Reengenharia</span> representam ' + reengPercent + '% das interferências (' + reengTotal.toLocaleString('pt-BR') + ')</li>' +
-        '<li>Disciplinas de <span class="highlight-red">Projeto Original (AltoQI)</span> representam ' + originalPercent + '% das interferências (' + originalTotal.toLocaleString('pt-BR') + ')</li>' +
+        '<li>Disciplinas de <span class="highlight-green">Reengenharia</span> representam ' + reengPercent + '% das interferências</li>' +
+        '<li>Disciplinas de <span class="highlight-red">Projeto Original (AltoQI)</span> representam ' + originalPercent + '% das interferências</li>' +
         '<li>Interferências com <span class="highlight-red">Estrutural (AltoQI)</span> requerem atenção especial pois envolvem elementos difíceis de modificar</li>' +
         '<li>O <span class="highlight-green">par HID x PLU não apresenta interferências</span> - boa coordenação entre sistemas hidrossanitários da Reengenharia</li>' +
         '<li>Recomenda-se reunião de coordenação BIM entre INTERATIVA, TEMON, ETP e AltoQI para resolver os casos mais críticos</li>';
