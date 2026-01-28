@@ -678,13 +678,25 @@
     function createCompanyChart() {
       const ctx = document.getElementById('pieCompany').getContext('2d');
 
+      // Cores específicas para cada empresa
+      const companyColors = {
+        'INTERATIVA': '#60a5fa',      // Azul
+        'TEMON': '#f87171',           // Vermelho
+        'AltoQI': '#a78bfa',          // Roxo
+        'ETP': '#22d3d3',             // Ciano
+        'Consórcio Fiscalizador': '#4ade80'  // Verde
+      };
+
+      const labels = Object.keys(byCompany);
+      const colors = labels.map(label => companyColors[label] || '#888888');
+
       new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: Object.keys(byCompany),
+          labels: labels,
           datasets: [{
             data: Object.values(byCompany),
-            backgroundColor: COLORS.pie
+            backgroundColor: colors
           }]
         },
         options: {
