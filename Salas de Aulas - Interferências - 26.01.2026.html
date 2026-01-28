@@ -679,7 +679,7 @@
                 label: function(context) {
                   const total = context.dataset.data.reduce((a, b) => a + b, 0);
                   const percent = ((context.raw / total) * 100).toFixed(1);
-                  return context.label + ': ' + context.raw.toLocaleString('pt-BR') + ' (' + percent + '%)';
+                  return context.label + ': ' + percent + '%';
                 }
               }
             }
@@ -726,7 +726,7 @@
                 label: function(context) {
                   const total = context.dataset.data.reduce((a, b) => a + b, 0);
                   const percent = ((context.raw / total) * 100).toFixed(1);
-                  return context.label + ': ' + context.raw.toLocaleString('pt-BR') + ' (' + percent + '%)';
+                  return context.label + ': ' + percent + '%';
                 }
               }
             }
