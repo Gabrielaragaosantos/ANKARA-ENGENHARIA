@@ -422,18 +422,32 @@
       <ul id="observationsList"></ul>
     </div>
 
-    <!-- Seção de Imagem -->
+    <!-- Seção de Imagem 1 -->
     <div class="image-section">
       <p class="image-description">Gradiente de interferências do Entre-Forros do Térreo, com o corte no 1º pavimento.</p>
       <button class="image-btn" onclick="openImageModal()">Imagem</button>
     </div>
+
+    <!-- Seção de Imagem 2 -->
+    <div class="image-section">
+      <p class="image-description">Gradiente de interferências do Entre-Forros do 1º pavimento, com o corte no 2º pavimento.</p>
+      <button class="image-btn" onclick="openImageModal2()">Imagem</button>
+    </div>
   </div>
 
-  <!-- Modal de Imagem -->
+  <!-- Modal de Imagem 1 -->
   <div class="image-modal" id="imageModal">
     <div class="modal-content">
       <button class="modal-close" onclick="closeImageModal()">&times;</button>
       <img src="Imagens Salas de Aulas/Teste/navisworks_interferencias_heatmap (1).png" alt="Gradiente de interferências do Entre-Forros do Térreo">
+    </div>
+  </div>
+
+  <!-- Modal de Imagem 2 -->
+  <div class="image-modal" id="imageModal2">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeImageModal2()">&times;</button>
+      <img src="Imagens Salas de Aulas/Teste/navisworks_interferencias_heatmap_1pav.png" alt="Gradiente de interferências do Entre-Forros do 1º pavimento">
     </div>
   </div>
 
@@ -826,7 +840,7 @@
     // Iniciar quando a página carregar
     document.addEventListener('DOMContentLoaded', init);
 
-    // Funções do Modal de Imagem
+    // Funções do Modal de Imagem 1
     function openImageModal() {
       document.getElementById('imageModal').classList.add('active');
       document.body.style.overflow = 'hidden';
@@ -837,6 +851,17 @@
       document.body.style.overflow = 'auto';
     }
 
+    // Funções do Modal de Imagem 2
+    function openImageModal2() {
+      document.getElementById('imageModal2').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeImageModal2() {
+      document.getElementById('imageModal2').classList.remove('active');
+      document.body.style.overflow = 'auto';
+    }
+
     // Fechar modal ao clicar fora da imagem
     document.getElementById('imageModal').addEventListener('click', function(e) {
       if (e.target === this) {
@@ -844,10 +869,17 @@
       }
     });
 
+    document.getElementById('imageModal2').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeImageModal2();
+      }
+    });
+
     // Fechar modal com tecla ESC
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         closeImageModal();
+        closeImageModal2();
       }
     });
   </script>
