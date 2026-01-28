@@ -175,7 +175,7 @@
         <div class="legend-item">
           <div class="legend-color" style="background: #22d3d3;"></div>
           <div>
-            <div class="legend-text">ARC - HVAC (Ar Condicionado)/DRENO</div>
+            <div class="legend-text">ARC - HVAC (Ar Condicionado)</div>
             <div class="legend-company">AltoQI</div>
           </div>
         </div>
@@ -295,12 +295,6 @@
     <!-- Gráficos por Categoria -->
     <div class="pie-grid">
       <div class="chart-container">
-        <h3>Interferências por Tipo de Sistema</h3>
-        <div class="chart-wrapper-small">
-          <canvas id="pieSystem"></canvas>
-        </div>
-      </div>
-      <div class="chart-container">
         <h3>Top 5 - Pares Mais Críticos</h3>
         <div class="chart-wrapper-small">
           <canvas id="pieTop5"></canvas>
@@ -395,27 +389,6 @@
       'ESG/PLU/HID': '#34d399'
     };
 
-    // Classificação por tipo de sistema
-    const systemTypeMap = {
-      'ARC': 'Mecânico',
-      'INC': 'Segurança',
-      'SPRK': 'Segurança',
-      'INC/SPRK': 'Segurança',
-      'EST': 'Civil',
-      'PLU': 'Hidrossanitário',
-      'ESG': 'Hidrossanitário',
-      'HID': 'Hidrossanitário',
-      'CAB': 'Elétrico/TI',
-      'ESP': 'Elétrico/TI',
-      'CAB/ESP': 'Elétrico/TI',
-      'ESP/CAB': 'Elétrico/TI',
-      'ELE': 'Elétrico/TI',
-      'LMT': 'Elétrico/TI',
-      'ELE/LMT': 'Elétrico/TI',
-      'PLU/ESG': 'Hidrossanitário',
-      'ESG/PLU/HID': 'Hidrossanitário'
-    };
-
     // Cálculos
     const totalClashes = clashData.reduce((acc, item) => acc + item.clashes, 0);
     const pairsWithClashes = clashData.filter(d => d.clashes > 0);
@@ -441,23 +414,7 @@
       return groups;
     }
 
-    // Agrupar por tipo de sistema
-    function groupBySystem() {
-      const groups = {};
-      clashData.forEach(item => {
-        const [d1, d2] = extractDisciplines(item.name);
-        const s1 = systemTypeMap[d1] || 'Outros';
-        const s2 = systemTypeMap[d2] || 'Outros';
-        if (!groups[s1]) groups[s1] = 0;
-        if (!groups[s2]) groups[s2] = 0;
-        groups[s1] += item.clashes;
-        groups[s2] += item.clashes;
-      });
-      return groups;
-    }
-
     const byDiscipline = groupByDiscipline();
-    const bySystem = groupBySystem();
 
     // Cores do tema
     const COLORS = {
@@ -471,7 +428,6 @@
       updateCards();
       createBarChart();
       createPieChart();
-      createSystemChart();
       createTop5Chart();
       updateTable();
       updateObservations();
@@ -552,48 +508,6 @@
             legend: {
               position: 'right',
               labels: { color: '#ccc', boxWidth: 12, padding: 6, font: { size: 9 } }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                  const percent = ((context.raw / total) * 100).toFixed(1);
-                  return context.label + ': ' + context.raw.toLocaleString('pt-BR') + ' (' + percent + '%)';
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-
-    // Criar gráfico por tipo de sistema
-    function createSystemChart() {
-      const ctx = document.getElementById('pieSystem').getContext('2d');
-      const systemColors = {
-        'Mecânico': '#22d3d3',
-        'Segurança': '#f87171',
-        'Civil': '#a1a1aa',
-        'Hidrossanitário': '#4ade80',
-        'Elétrico/TI': '#60a5fa'
-      };
-
-      new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: Object.keys(bySystem),
-          datasets: [{
-            data: Object.values(bySystem),
-            backgroundColor: Object.keys(bySystem).map(k => systemColors[k] || '#999')
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: { color: '#ccc', boxWidth: 12, padding: 8, font: { size: 11 } }
             },
             tooltip: {
               callbacks: {
