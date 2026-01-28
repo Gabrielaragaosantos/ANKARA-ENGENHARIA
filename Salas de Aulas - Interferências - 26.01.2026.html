@@ -169,6 +169,76 @@
       .pie-grid { grid-template-columns: 1fr; }
       .chart-wrapper { height: 350px; }
     }
+    /* Botão de Imagem */
+    .image-section {
+      margin-top: 32px;
+      text-align: center;
+    }
+    .image-btn {
+      background: linear-gradient(135deg, #FF6B00 0%, #FFB800 100%);
+      color: #1a1a1a;
+      border: none;
+      padding: 14px 32px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(255, 107, 0, 0.3);
+    }
+    .image-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 107, 0, 0.4);
+    }
+    /* Modal de Imagem */
+    .image-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .image-modal.active {
+      display: flex;
+    }
+    .modal-content {
+      position: relative;
+      max-width: 95%;
+      max-height: 95%;
+    }
+    .modal-content img {
+      max-width: 100%;
+      max-height: 90vh;
+      border-radius: 8px;
+      box-shadow: 0 0 30px rgba(255, 107, 0, 0.3);
+    }
+    .modal-close {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      background: #FF6B00;
+      color: #1a1a1a;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    .modal-close:hover {
+      background: #FFB800;
+      transform: scale(1.1);
+    }
   </style>
 </head>
 <body>
@@ -339,6 +409,19 @@
     <div class="observations">
       <h3>📊 Análise e Recomendações</h3>
       <ul id="observationsList"></ul>
+    </div>
+
+    <!-- Seção de Imagem -->
+    <div class="image-section">
+      <button class="image-btn" onclick="openImageModal()">Imagem</button>
+    </div>
+  </div>
+
+  <!-- Modal de Imagem -->
+  <div class="image-modal" id="imageModal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeImageModal()">&times;</button>
+      <img src="1pavSALAS.png" alt="1º Pavimento - Salas de Aulas">
     </div>
   </div>
 
@@ -718,6 +801,31 @@
 
     // Iniciar quando a página carregar
     document.addEventListener('DOMContentLoaded', init);
+
+    // Funções do Modal de Imagem
+    function openImageModal() {
+      document.getElementById('imageModal').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeImageModal() {
+      document.getElementById('imageModal').classList.remove('active');
+      document.body.style.overflow = 'auto';
+    }
+
+    // Fechar modal ao clicar fora da imagem
+    document.getElementById('imageModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeImageModal();
+      }
+    });
+
+    // Fechar modal com tecla ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeImageModal();
+      }
+    });
   </script>
 </body>
 </html>
