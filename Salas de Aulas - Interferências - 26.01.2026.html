@@ -819,6 +819,10 @@
       const sortedDisciplines = Object.entries(byDiscipline).sort((a, b) => b[1] - a[1]);
       const topDiscipline = sortedDisciplines[0];
 
+      // Calcular percentual da disciplina com maior impacto
+      const totalDiscipline = Object.values(byDiscipline).reduce((a, b) => a + b, 0);
+      const topDisciplinePercent = ((topDiscipline[1] / totalDiscipline) * 100).toFixed(1);
+
       // Calcular totais por origem
       const reengTotal = byProjectOrigin['Reengenharia'] || 0;
       const originalTotal = byProjectOrigin['Projeto Original'] || 0;
@@ -826,10 +830,10 @@
       const reengPercent = ((reengTotal / totalOrigin) * 100).toFixed(1);
       const originalPercent = ((originalTotal / totalOrigin) * 100).toFixed(1);
 
-      ul.innerHTML = 
+      ul.innerHTML =
         '<li>Total de <span class="highlight-orange">' + totalClashes.toLocaleString('pt-BR') + ' interferências</span> identificadas em ' + totalPairs + ' pares de disciplinas</li>' +
         '<li>O par mais crítico é <span class="highlight-red">' + maxClash.name + '</span> com ' + maxClash.clashes + ' interferências - prioridade máxima de resolução</li>' +
-        '<li>A disciplina <span class="highlight-yellow">' + (disciplineNames[topDiscipline[0]] || topDiscipline[0]) + '</span> está envolvida em ' + topDiscipline[1].toLocaleString('pt-BR') + ' interferências (maior impacto)</li>' +
+        '<li>A disciplina <span class="highlight-yellow">' + (disciplineNames[topDiscipline[0]] || topDiscipline[0]) + '</span> está envolvida em ' + topDisciplinePercent + '% das interferências (maior impacto)</li>' +
         '<li>Disciplinas de <span class="highlight-green">Reengenharia</span> representam ' + reengPercent + '% das interferências</li>' +
         '<li>Disciplinas de <span class="highlight-red">Projeto Original (AltoQI)</span> representam ' + originalPercent + '% das interferências</li>' +
         '<li>Interferências com <span class="highlight-red">Estrutural (AltoQI)</span> requerem atenção especial pois envolvem elementos difíceis de modificar</li>' +
