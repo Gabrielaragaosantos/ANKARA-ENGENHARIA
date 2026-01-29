@@ -152,6 +152,28 @@
       .pie-grid { grid-template-columns: 1fr; }
       .chart-wrapper { height: 400px; }
     }
+    /* Seção de Imagem */
+    .image-section {
+      margin-top: 32px;
+      text-align: center;
+    }
+    .image-description {
+      color: #ddd;
+      font-size: 1rem;
+      margin-bottom: 16px;
+      padding: 12px 20px;
+      background: rgba(255, 107, 0, 0.1);
+      border-left: 3px solid #FF6B00;
+      border-radius: 0 8px 8px 0;
+      display: inline-block;
+      max-width: 600px;
+    }
+    .dashboard-image {
+      max-width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(255, 107, 0, 0.2);
+      border: 1px solid #FF6B0040;
+    }
   </style>
 </head>
 <body>
@@ -321,6 +343,12 @@
     <div class="observations">
       <h3>📊 Análise e Recomendações</h3>
       <ul id="observationsList"></ul>
+    </div>
+
+    <!-- Seção de Imagem -->
+    <div class="image-section">
+      <p class="image-description">Gradiente de interferências do Entre-Forros do Térreo, com o corte no 1º pavimento.</p>
+      <img class="dashboard-image" src="Imagens Salas de Aulas/Teste/Navis_AULAS_interferencias_heatmap_5capturas_crop.png" alt="Gradiente de interferências do Entre-Forros do Térreo">
     </div>
   </div>
 
