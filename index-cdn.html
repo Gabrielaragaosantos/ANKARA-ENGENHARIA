@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador IFC - UNILA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            overflow: hidden;
+        }
+        #app { display: flex; height: 100vh; }
+        #sidebar {
+            width: 300px;
+            background: #16213e;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+        #sidebar h1 {
+            font-size: 1.4em;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #45a049; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        .btn-secondary { background: #2196F3; }
+        .btn-secondary:hover { background: #1976D2; }
+        #file-input { display: none; }
+        #viewer-container { flex: 1; position: relative; }
+        #canvas { width: 100%; height: 100%; display: block; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px 50px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+        }
+        #loading.active { display: block; }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #info-panel {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        #info-panel.active { display: block; }
+        #info-panel h3 { color: #4CAF50; margin-bottom: 10px; }
+        #info-panel p { margin: 5px 0; font-size: 13px; }
+        #debug {
+            background: #0a0a15;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .log-success { color: #4CAF50; }
+        .log-error { color: #f44336; }
+        .log-warning { color: #FF9800; }
+        .log-info { color: #2196F3; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="sidebar">
+            <h1>Visualizador IFC UNILA</h1>
+            <label for="file-input" class="btn">Carregar Arquivo IFC</label>
+            <input type="file" id="file-input" accept=".ifc">
+            <button id="btn-fit" class="btn btn-secondary" disabled>Enquadrar Modelo</button>
+            <button id="btn-grid" class="btn btn-secondary">Toggle Grid</button>
+            <div id="info-panel">
+                <h3>Informacoes do Modelo</h3>
+                <p id="info-name">-</p>
+                <p id="info-elements">-</p>
+                <p id="info-size">-</p>
+            </div>
+            <div id="debug">
+                <div class="log-info">[Sistema] Aguardando inicializacao...</div>
+            </div>
+        </div>
+        <div id="viewer-container">
+            <canvas id="canvas"></canvas>
+            <div id="loading">
+                <div class="spinner"></div>
+                <p id="loading-text">Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Variaveis globais
+        let scene, camera, renderer, controls, gridHelper;
+        let ifcAPI = null;
+        let currentModel = null;
+
+        // Logger
+        function log(msg, type = 'info') {
+            const debug = document.getElementById('debug');
+            const div = document.createElement('div');
+            div.className = `log-${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debug.appendChild(div);
+            debug.scrollTop = debug.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${msg}`);
+        }
+
+        function showLoading(text) {
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('loading-text').textContent = text;
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+
+        // Inicializar Three.js
+        function initThreeJS() {
+            log('Inicializando Three.js...', 'info');
+            const container = document.getElementById('viewer-container');
+            const canvas = document.getElementById('canvas');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
+            camera.position.set(50, 50, 50);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dir1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dir1.position.set(50, 100, 50);
+            scene.add(dir1);
+            const dir2 = new THREE.DirectionalLight(0xffffff, 0.4);
+            dir2.position.set(-50, 50, -50);
+            scene.add(dir2);
+
+            gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
+            scene.add(gridHelper);
+            scene.add(new THREE.AxesHelper(10));
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            log('Three.js inicializado!', 'success');
+        }
+
+        // Inicializar web-ifc via ES Module
+        async function initWebIFC() {
+            log('Carregando web-ifc...', 'info');
+            showLoading('Carregando motor IFC...');
+
+            try {
+                // Importar web-ifc como ES Module
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                log('Modulo web-ifc importado', 'success');
+
+                ifcAPI = new WebIFC.IfcAPI();
+                ifcAPI.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/');
+
+                log('Inicializando WASM...', 'info');
+                await ifcAPI.Init();
+
+                log('web-ifc pronto!', 'success');
+                hideLoading();
+            } catch (err) {
+                log(`Erro ao carregar web-ifc: ${err.message}`, 'error');
+                console.error(err);
+                hideLoading();
+                throw err;
+            }
+        }
+
+        // Carregar IFC
+        async function loadIFC(file) {
+            if (!ifcAPI) {
+                alert('Motor IFC nao inicializado. Recarregue a pagina.');
+                return;
+            }
+
+            try {
+                log(`Carregando: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+                showLoading('Lendo arquivo...');
+
+                // Limpar modelo anterior
+                if (currentModel) {
+                    scene.remove(currentModel);
+                    currentModel.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                    currentModel = null;
+                }
+
+                const data = new Uint8Array(await file.arrayBuffer());
+                log(`Arquivo lido: ${data.length} bytes`, 'info');
+
+                showLoading('Processando IFC...');
+
+                const modelID = ifcAPI.OpenModel(data);
+                log(`Modelo aberto (ID: ${modelID})`, 'success');
+
+                showLoading('Gerando geometrias...');
+
+                const modelGroup = new THREE.Group();
+                let meshCount = 0;
+
+                ifcAPI.StreamAllMeshes(modelID, (mesh) => {
+                    const geoms = mesh.geometries;
+                    for (let i = 0; i < geoms.size(); i++) {
+                        const pg = geoms.get(i);
+                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
+                        const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                        const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+
+                        if (vData.length === 0) {
+                            geom.delete();
+                            continue;
+                        }
+
+                        const positions = [];
+                        const normals = [];
+                        for (let j = 0; j < vData.length; j += 6) {
+                            positions.push(vData[j], vData[j+1], vData[j+2]);
+                            normals.push(vData[j+3], vData[j+4], vData[j+5]);
+                        }
+
+                        const bufferGeom = new THREE.BufferGeometry();
+                        bufferGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                        bufferGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                        if (iData.length > 0) {
+                            bufferGeom.setIndex(Array.from(iData));
+                        }
+
+                        const c = pg.color;
+                        const mat = new THREE.MeshPhongMaterial({
+                            color: new THREE.Color(c.x, c.y, c.z),
+                            opacity: c.w,
+                            transparent: c.w < 1,
+                            side: THREE.DoubleSide
+                        });
+
+                        const threeMesh = new THREE.Mesh(bufferGeom, mat);
+                        const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
+                        threeMesh.applyMatrix4(matrix);
+
+                        modelGroup.add(threeMesh);
+                        meshCount++;
+                        geom.delete();
+                    }
+                });
+
+                log(`Gerados ${meshCount} meshes`, 'success');
+
+                scene.add(modelGroup);
+                currentModel = modelGroup;
+
+                const box = new THREE.Box3().setFromObject(modelGroup);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
+                controls.target.copy(center);
+                controls.update();
+
+                document.getElementById('info-panel').classList.add('active');
+                document.getElementById('info-name').textContent = `Arquivo: ${file.name}`;
+                document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
+                document.getElementById('info-size').textContent = `Dimensoes: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
+                document.getElementById('btn-fit').disabled = false;
+
+                ifcAPI.CloseModel(modelID);
+                hideLoading();
+                log('Modelo carregado com sucesso!', 'success');
+
+            } catch (error) {
+                log(`ERRO: ${error.message}`, 'error');
+                console.error(error);
+                hideLoading();
+                alert(`Erro ao carregar IFC:\n\n${error.message}`);
+            }
+        }
+
+        function fitModel() {
+            if (!currentModel) return;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
+            controls.target.copy(center);
+            controls.update();
+            log('Modelo enquadrado', 'info');
+        }
+
+        let gridVisible = true;
+        function toggleGrid() {
+            gridVisible = !gridVisible;
+            gridHelper.visible = gridVisible;
+            log(`Grid ${gridVisible ? 'visivel' : 'oculto'}`, 'info');
+        }
+
+        // Event listeners
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                log(`Selecionado: ${file.name}`, 'info');
+                loadIFC(file);
+            }
+        });
+        document.getElementById('btn-fit').addEventListener('click', fitModel);
+        document.getElementById('btn-grid').addEventListener('click', toggleGrid);
+
+        // Iniciar
+        async function main() {
+            log('Iniciando...', 'info');
+            try {
+                initThreeJS();
+                await initWebIFC();
+                log('VISUALIZADOR PRONTO!', 'success');
+            } catch (err) {
+                log(`Falha na inicializacao: ${err.message}`, 'error');
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
