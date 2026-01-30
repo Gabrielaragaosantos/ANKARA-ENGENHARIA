@@ -5,31 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador IFC - UNILA</title>
     <style>
+        /* ====== TEMA CONSÓRCIO MPD/ANKARA ====== */
+        :root {
+            --cor-primaria: #E65100;      /* Laranja forte */
+            --cor-secundaria: #8B4513;    /* Marrom/Terracota */
+            --cor-accent: #FFB300;        /* Amarelo/Dourado */
+            --cor-dark: #1a1a1a;          /* Preto/Cinza escuro */
+            --cor-sidebar: #2d2d2d;       /* Fundo sidebar */
+            --cor-panel: #3d3d3d;         /* Fundo painéis */
+            --cor-text: #ffffff;          /* Texto branco */
+            --cor-text-muted: #b0b0b0;    /* Texto secundário */
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a2e;
-            color: #fff;
+            background: var(--cor-dark);
+            color: var(--cor-text);
             overflow: hidden;
         }
         #app { display: flex; height: 100vh; }
         #sidebar {
-            width: 300px;
-            background: #16213e;
+            width: 320px;
+            background: var(--cor-sidebar);
             padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 15px;
             overflow-y: auto;
         }
+
+        /* Header com logos */
+        .header-logos {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--cor-primaria);
+            margin-bottom: 5px;
+        }
+        .logo-consorcio {
+            height: 60px;
+            width: auto;
+        }
+        .logo-unila {
+            height: 50px;
+            width: auto;
+        }
+
         #sidebar h1 {
-            font-size: 1.4em;
-            color: #4CAF50;
-            border-bottom: 2px solid #4CAF50;
+            font-size: 1.3em;
+            color: var(--cor-primaria);
+            padding-bottom: 5px;
+            text-align: center;
+        }
+        #sidebar .subtitle {
+            font-size: 0.95em;
+            color: var(--cor-accent);
+            text-align: center;
+            margin-top: -5px;
             padding-bottom: 10px;
+            border-bottom: 1px solid var(--cor-secundaria);
         }
         .btn {
-            background: #4CAF50;
+            background: var(--cor-primaria);
             color: white;
             border: none;
             padding: 12px 20px;
@@ -38,10 +77,10 @@
             font-size: 14px;
             transition: background 0.3s;
         }
-        .btn:hover { background: #45a049; }
+        .btn:hover { background: #BF360C; }
         .btn:disabled { background: #555; cursor: not-allowed; }
-        .btn-secondary { background: #2196F3; }
-        .btn-secondary:hover { background: #1976D2; }
+        .btn-secondary { background: var(--cor-secundaria); }
+        .btn-secondary:hover { background: #6D3410; }
         #file-input { display: none; }
         #viewer-container { flex: 1; position: relative; }
         #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
@@ -52,7 +91,7 @@
             position: absolute;
             width: 20px;
             height: 20px;
-            border: 3px solid #4CAF50;
+            border: 3px solid var(--cor-primaria);
             border-radius: 50%;
             pointer-events: none;
             transform: translate(-50%, -50%);
@@ -67,7 +106,7 @@
             left: 50%;
             width: 6px;
             height: 6px;
-            background: #4CAF50;
+            background: var(--cor-primaria);
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
@@ -92,42 +131,43 @@
             width: 50px;
             height: 50px;
             border: 4px solid #333;
-            border-top: 4px solid #4CAF50;
+            border-top: 4px solid var(--cor-primaria);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 15px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         #info-panel {
-            background: #0f3460;
+            background: var(--cor-panel);
             padding: 15px;
             border-radius: 8px;
             display: none;
+            border-left: 3px solid var(--cor-primaria);
         }
         #info-panel.active { display: block; }
-        #info-panel h3 { color: #4CAF50; margin-bottom: 10px; }
+        #info-panel h3 { color: var(--cor-primaria); margin-bottom: 10px; }
         #info-panel p { margin: 5px 0; font-size: 13px; }
 
         /* Painel de seleção */
         #selection-panel {
-            background: #1a3a5c;
+            background: var(--cor-panel);
             padding: 15px;
             border-radius: 8px;
             display: none;
-            border-left: 3px solid #FF9800;
+            border-left: 3px solid var(--cor-accent);
         }
         #selection-panel.active { display: block; }
-        #selection-panel h3 { color: #FF9800; margin-bottom: 10px; font-size: 14px; }
+        #selection-panel h3 { color: var(--cor-accent); margin-bottom: 10px; font-size: 14px; }
         #selection-panel p { margin: 4px 0; font-size: 12px; }
-        #selection-panel .label { color: #888; }
-        #selection-panel .value { color: #fff; }
+        #selection-panel .label { color: var(--cor-text-muted); }
+        #selection-panel .value { color: var(--cor-text); }
         #btn-clear-selection {
             margin-top: 10px;
-            background: #f44336;
+            background: #c62828;
             padding: 8px 12px;
             font-size: 12px;
         }
-        #btn-clear-selection:hover { background: #d32f2f; }
+        #btn-clear-selection:hover { background: #b71c1c; }
 
         /* Botões de ação do elemento */
         .selection-actions {
@@ -142,16 +182,16 @@
             padding: 8px 10px;
             font-size: 11px;
         }
-        .btn-hide { background: #9C27B0; }
-        .btn-hide:hover { background: #7B1FA2; }
-        .btn-isolate { background: #00BCD4; }
-        .btn-isolate:hover { background: #0097A7; }
-        .btn-show-all { background: #8BC34A; }
-        .btn-show-all:hover { background: #689F38; }
+        .btn-hide { background: var(--cor-secundaria); }
+        .btn-hide:hover { background: #6D3410; }
+        .btn-isolate { background: var(--cor-accent); color: #000; }
+        .btn-isolate:hover { background: #FF8F00; }
+        .btn-show-all { background: #558B2F; }
+        .btn-show-all:hover { background: #33691E; }
 
         /* Contador de elementos ocultos */
         #hidden-counter {
-            background: #37474F;
+            background: var(--cor-panel);
             padding: 8px 12px;
             border-radius: 6px;
             font-size: 12px;
@@ -159,18 +199,19 @@
             text-align: center;
         }
         #hidden-counter.active { display: block; }
-        #hidden-counter span { color: #FF9800; font-weight: bold; }
+        #hidden-counter span { color: var(--cor-accent); font-weight: bold; }
 
         /* Controle de transparência */
         #transparency-panel {
-            background: #1a3a5c;
+            background: var(--cor-panel);
             padding: 12px 15px;
             border-radius: 8px;
             display: none;
+            border-left: 3px solid var(--cor-secundaria);
         }
         #transparency-panel.active { display: block; }
         #transparency-panel h4 {
-            color: #9C27B0;
+            color: var(--cor-secundaria);
             margin-bottom: 10px;
             font-size: 13px;
         }
@@ -183,7 +224,7 @@
             flex: 1;
             height: 6px;
             -webkit-appearance: none;
-            background: #333;
+            background: #555;
             border-radius: 3px;
             outline: none;
         }
@@ -191,14 +232,14 @@
             -webkit-appearance: none;
             width: 16px;
             height: 16px;
-            background: #9C27B0;
+            background: var(--cor-primaria);
             border-radius: 50%;
             cursor: pointer;
         }
         .slider-container input[type="range"]::-moz-range-thumb {
             width: 16px;
             height: 16px;
-            background: #9C27B0;
+            background: var(--cor-primaria);
             border-radius: 50%;
             cursor: pointer;
             border: none;
@@ -207,21 +248,21 @@
             min-width: 45px;
             text-align: right;
             font-size: 12px;
-            color: #9C27B0;
+            color: var(--cor-primaria);
             font-weight: bold;
         }
 
         /* Painel de plano de corte */
         #clipping-panel {
-            background: #1a3a5c;
+            background: var(--cor-panel);
             padding: 12px 15px;
             border-radius: 8px;
             display: none;
-            border-left: 3px solid #E91E63;
+            border-left: 3px solid var(--cor-primaria);
         }
         #clipping-panel.active { display: block; }
         #clipping-panel h4 {
-            color: #E91E63;
+            color: var(--cor-primaria);
             margin-bottom: 10px;
             font-size: 13px;
         }
@@ -244,20 +285,20 @@
             flex: 1;
             height: 6px;
             -webkit-appearance: none;
-            background: #333;
+            background: #555;
             border-radius: 3px;
         }
         .clipping-axis input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 14px;
             height: 14px;
-            background: #E91E63;
+            background: var(--cor-primaria);
             border-radius: 50%;
             cursor: pointer;
         }
         .axis-x { color: #f44336; }
-        .axis-y { color: #4CAF50; }
-        .axis-z { color: #2196F3; }
+        .axis-y { color: #558B2F; }
+        .axis-z { color: #1565C0; }
         .clipping-buttons {
             display: flex;
             gap: 8px;
@@ -268,30 +309,30 @@
             padding: 6px 10px;
             font-size: 11px;
         }
-        .btn-clip-toggle { background: #E91E63; }
-        .btn-clip-toggle:hover { background: #C2185B; }
-        .btn-clip-toggle.active { background: #4CAF50; }
-        .btn-clip-reset { background: #607D8B; }
-        .btn-clip-reset:hover { background: #455A64; }
-        .btn-clip-flip { background: #FF5722; }
-        .btn-clip-flip:hover { background: #E64A19; }
+        .btn-clip-toggle { background: var(--cor-primaria); }
+        .btn-clip-toggle:hover { background: #BF360C; }
+        .btn-clip-toggle.active { background: #558B2F; }
+        .btn-clip-reset { background: #546E7A; }
+        .btn-clip-reset:hover { background: #37474F; }
+        .btn-clip-flip { background: var(--cor-secundaria); }
+        .btn-clip-flip:hover { background: #6D3410; }
 
         /* Painel de medição */
         #measure-panel {
-            background: #1a3a5c;
+            background: var(--cor-panel);
             padding: 12px 15px;
             border-radius: 8px;
             display: none;
-            border-left: 3px solid #FFEB3B;
+            border-left: 3px solid var(--cor-accent);
         }
         #measure-panel.active { display: block; }
         #measure-panel h4 {
-            color: #FFEB3B;
+            color: var(--cor-accent);
             margin-bottom: 10px;
             font-size: 13px;
         }
         .measure-result {
-            background: #0a0a15;
+            background: #1a1a1a;
             padding: 10px;
             border-radius: 6px;
             margin-bottom: 10px;
@@ -300,15 +341,15 @@
         .measure-result .distance {
             font-size: 24px;
             font-weight: bold;
-            color: #FFEB3B;
+            color: var(--cor-accent);
         }
         .measure-result .unit {
             font-size: 14px;
-            color: #888;
+            color: var(--cor-text-muted);
         }
         .measure-points {
             font-size: 11px;
-            color: #888;
+            color: var(--cor-text-muted);
             margin-top: 5px;
         }
         .measure-buttons {
@@ -320,24 +361,24 @@
             padding: 8px 10px;
             font-size: 11px;
         }
-        .btn-measure { background: #FFEB3B; color: #000; }
-        .btn-measure:hover { background: #FDD835; }
-        .btn-measure.active { background: #4CAF50; color: #fff; }
-        .btn-measure-clear { background: #607D8B; }
-        .btn-measure-clear:hover { background: #455A64; }
+        .btn-measure { background: var(--cor-accent); color: #000; }
+        .btn-measure:hover { background: #FF8F00; }
+        .btn-measure.active { background: #558B2F; color: #fff; }
+        .btn-measure-clear { background: #546E7A; }
+        .btn-measure-clear:hover { background: #37474F; }
         #canvas.measuring { cursor: crosshair !important; }
 
         /* Painel de vistas */
         #views-panel {
-            background: #1a3a5c;
+            background: var(--cor-panel);
             padding: 12px 15px;
             border-radius: 8px;
             display: none;
-            border-left: 3px solid #00BCD4;
+            border-left: 3px solid var(--cor-secundaria);
         }
         #views-panel.active { display: block; }
         #views-panel h4 {
-            color: #00BCD4;
+            color: var(--cor-secundaria);
             margin-bottom: 10px;
             font-size: 13px;
         }
@@ -357,10 +398,10 @@
         .views-grid .btn .icon {
             font-size: 18px;
         }
-        .btn-view { background: #00BCD4; }
-        .btn-view:hover { background: #0097A7; }
+        .btn-view { background: var(--cor-secundaria); }
+        .btn-view:hover { background: #6D3410; }
         #debug {
-            background: #0a0a15;
+            background: #1a1a1a;
             padding: 10px;
             border-radius: 8px;
             max-height: 200px;
@@ -368,10 +409,10 @@
             font-family: monospace;
             font-size: 11px;
         }
-        .log-success { color: #4CAF50; }
-        .log-error { color: #f44336; }
-        .log-warning { color: #FF9800; }
-        .log-info { color: #2196F3; }
+        .log-success { color: #558B2F; }
+        .log-error { color: #c62828; }
+        .log-warning { color: var(--cor-accent); }
+        .log-info { color: var(--cor-primaria); }
 
         /* Responsivo para mobile */
         @media (max-width: 768px) {
@@ -389,19 +430,42 @@
         .credits {
             margin-top: auto;
             padding-top: 15px;
-            border-top: 1px solid #333;
+            border-top: 1px solid #444;
             font-size: 11px;
-            color: #888;
+            color: var(--cor-text-muted);
             text-align: center;
         }
-        .credits a { color: #4CAF50; text-decoration: none; }
+        .credits a { color: var(--cor-primaria); text-decoration: none; }
         .credits a:hover { text-decoration: underline; }
+        .credits .dev-info {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #333;
+            line-height: 1.6;
+        }
+        .credits .dev-name {
+            color: var(--cor-secundaria);
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .credits .dev-email {
+            color: var(--cor-primaria);
+        }
+        .credits .dev-role {
+            color: var(--cor-text-muted);
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <div id="sidebar">
+            <div class="header-logos">
+                <img src="logo-consorcio.png" alt="Consórcio MPD/Ankara" class="logo-consorcio" onerror="this.style.display='none'">
+                <img src="logo-unila.png" alt="UNILA" class="logo-unila" onerror="this.style.display='none'">
+            </div>
             <h1>🏗️ Visualizador IFC UNILA</h1>
+            <p class="subtitle">Consórcio MPD/Ankara</p>
             <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
             <input type="file" id="file-input" accept=".ifc">
             <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
@@ -486,8 +550,13 @@
                 <div class="log-info">[Sistema] Aguardando inicialização...</div>
             </div>
             <div class="credits">
-                Desenvolvido por <a href="https://github.com/seu-usuario" target="_blank">Gabriel - UNILA</a><br>
+                Desenvolvido para UNILA<br>
                 Powered by Three.js + web-ifc
+                <div class="dev-info">
+                    <span class="dev-name">Gabriel Aragão Santos</span><br>
+                    <a href="mailto:gabriel.santos@ankaraengenharia.com.br" class="dev-email">gabriel.santos@ankaraengenharia.com.br</a><br>
+                    <span class="dev-role">Arquiteto</span>
+                </div>
             </div>
         </div>
         <div id="viewer-container">
@@ -581,7 +650,7 @@
             const canvas = document.getElementById('canvas');
 
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a2e);
+            scene.background = new THREE.Color(0x1a1a1a);
 
             camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
             camera.position.set(50, 50, 50);
