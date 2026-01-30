@@ -326,6 +326,39 @@
         .btn-measure-clear { background: #607D8B; }
         .btn-measure-clear:hover { background: #455A64; }
         #canvas.measuring { cursor: crosshair !important; }
+
+        /* Painel de vistas */
+        #views-panel {
+            background: #1a3a5c;
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid #00BCD4;
+        }
+        #views-panel.active { display: block; }
+        #views-panel h4 {
+            color: #00BCD4;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .views-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        .views-grid .btn {
+            padding: 10px 8px;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .views-grid .btn .icon {
+            font-size: 18px;
+        }
+        .btn-view { background: #00BCD4; }
+        .btn-view:hover { background: #0097A7; }
         #debug {
             background: #0a0a15;
             padding: 10px;
@@ -435,6 +468,18 @@
                 <div class="measure-buttons">
                     <button id="btn-measure-toggle" class="btn btn-measure">📏 Medir</button>
                     <button id="btn-measure-clear" class="btn btn-measure-clear">🗑️ Limpar</button>
+                </div>
+            </div>
+            <div id="views-panel">
+                <h4>👁️ Vistas Predefinidas</h4>
+                <div class="views-grid">
+                    <button id="btn-view-front" class="btn btn-view"><span class="icon">⬆️</span>Frontal</button>
+                    <button id="btn-view-back" class="btn btn-view"><span class="icon">⬇️</span>Traseira</button>
+                    <button id="btn-view-left" class="btn btn-view"><span class="icon">⬅️</span>Esquerda</button>
+                    <button id="btn-view-right" class="btn btn-view"><span class="icon">➡️</span>Direita</button>
+                    <button id="btn-view-top" class="btn btn-view"><span class="icon">🔝</span>Topo</button>
+                    <button id="btn-view-bottom" class="btn btn-view"><span class="icon">🔻</span>Inferior</button>
+                    <button id="btn-view-iso" class="btn btn-view" style="grid-column: span 2;"><span class="icon">📐</span>Isométrica</button>
                 </div>
             </div>
             <div id="debug">
@@ -736,6 +781,7 @@
                 document.getElementById('transparency-panel').classList.add('active');
                 document.getElementById('clipping-panel').classList.add('active');
                 document.getElementById('measure-panel').classList.add('active');
+                document.getElementById('views-panel').classList.add('active');
                 updateModelBounds();
 
                 ifcAPI.CloseModel(modelID);
@@ -1248,6 +1294,75 @@
             }
         }
 
+        // Função genérica para animar câmera para uma vista
+        function animateToView(targetPosition, targetLookAt, viewName) {
+            if (!currentModel) return;
+
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = maxDim * 1.8;
+
+            // Calcular posição final
+            const endPosition = new THREE.Vector3();
+            endPosition.copy(center).add(targetPosition.clone().multiplyScalar(distance));
+
+            // Animar transição
+            const startPosition = camera.position.clone();
+            const startTarget = controls.target.clone();
+            const duration = 500;
+            const startTime = Date.now();
+
+            function animateView() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+
+                camera.position.lerpVectors(startPosition, endPosition, eased);
+                controls.target.lerpVectors(startTarget, center, eased);
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateView);
+                } else {
+                    log(`Vista: ${viewName}`, 'success');
+                }
+            }
+            animateView();
+        }
+
+        // Vistas predefinidas
+        function setViewFront() {
+            animateToView(new THREE.Vector3(0, 0, 1), null, 'Frontal');
+        }
+
+        function setViewBack() {
+            animateToView(new THREE.Vector3(0, 0, -1), null, 'Traseira');
+        }
+
+        function setViewLeft() {
+            animateToView(new THREE.Vector3(-1, 0, 0), null, 'Esquerda');
+        }
+
+        function setViewRight() {
+            animateToView(new THREE.Vector3(1, 0, 0), null, 'Direita');
+        }
+
+        function setViewTop() {
+            animateToView(new THREE.Vector3(0, 1, 0.001), null, 'Topo'); // 0.001 para evitar gimbal lock
+        }
+
+        function setViewBottom() {
+            animateToView(new THREE.Vector3(0, -1, 0.001), null, 'Inferior');
+        }
+
+        function setViewIsometric() {
+            animateToView(new THREE.Vector3(1, 1, 1).normalize(), null, 'Isométrica');
+        }
+
         // Event listeners
         document.getElementById('file-input').addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -1288,6 +1403,15 @@
         // Controles de medição
         document.getElementById('btn-measure-toggle').addEventListener('click', toggleMeasureMode);
         document.getElementById('btn-measure-clear').addEventListener('click', clearMeasurement);
+
+        // Controles de vistas
+        document.getElementById('btn-view-front').addEventListener('click', setViewFront);
+        document.getElementById('btn-view-back').addEventListener('click', setViewBack);
+        document.getElementById('btn-view-left').addEventListener('click', setViewLeft);
+        document.getElementById('btn-view-right').addEventListener('click', setViewRight);
+        document.getElementById('btn-view-top').addEventListener('click', setViewTop);
+        document.getElementById('btn-view-bottom').addEventListener('click', setViewBottom);
+        document.getElementById('btn-view-iso').addEventListener('click', setViewIsometric);
 
         // Iniciar
         async function main() {
