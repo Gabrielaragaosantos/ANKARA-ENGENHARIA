@@ -44,7 +44,37 @@
         .btn-secondary:hover { background: #1976D2; }
         #file-input { display: none; }
         #viewer-container { flex: 1; position: relative; }
-        #canvas { width: 100%; height: 100%; display: block; }
+        #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+        #canvas:active { cursor: grabbing; }
+
+        /* Indicador de ponto de órbita */
+        #orbit-indicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #4CAF50;
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 50;
+            animation: pulse 0.5s ease-out;
+        }
+        #orbit-indicator::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background: #4CAF50;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
         #loading {
             position: absolute;
             top: 50%;
@@ -123,7 +153,9 @@
             <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
             <input type="file" id="file-input" accept=".ifc">
             <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
+            <button id="btn-center-orbit" class="btn btn-secondary" disabled>🔄 Centralizar Órbita</button>
             <button id="btn-grid" class="btn btn-secondary">📐 Toggle Grid</button>
+            <p id="orbit-hint" style="font-size: 11px; color: #888; display: none;">💡 Duplo clique no modelo para definir centro de órbita</p>
             <div id="info-panel">
                 <h3>Informações do Modelo</h3>
                 <p id="info-name">-</p>
@@ -140,6 +172,7 @@
         </div>
         <div id="viewer-container">
             <canvas id="canvas"></canvas>
+            <div id="orbit-indicator"></div>
             <div id="loading">
                 <div class="spinner"></div>
                 <p id="loading-text">Carregando...</p>
@@ -164,6 +197,8 @@
         let scene, camera, renderer, controls, gridHelper;
         let ifcAPI = null;
         let currentModel = null;
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
 
         // Logger
         function log(msg, type = 'info') {
@@ -364,6 +399,8 @@
                 document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
                 document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
                 document.getElementById('btn-fit').disabled = false;
+                document.getElementById('btn-center-orbit').disabled = false;
+                document.getElementById('orbit-hint').style.display = 'block';
 
                 ifcAPI.CloseModel(modelID);
                 hideLoading();
@@ -398,6 +435,82 @@
             log(`Grid ${gridVisible ? 'visível' : 'oculto'}`, 'info');
         }
 
+        // Centralizar órbita no ponto clicado
+        function setOrbitCenter(event) {
+            if (!currentModel) return;
+
+            const container = document.getElementById('viewer-container');
+            const rect = container.getBoundingClientRect();
+
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentModel, true);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+
+                // Animar a transição do centro de órbita
+                const startTarget = controls.target.clone();
+                const endTarget = point.clone();
+                const duration = 300;
+                const startTime = Date.now();
+
+                function animateOrbit() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+
+                    controls.target.lerpVectors(startTarget, endTarget, eased);
+                    controls.update();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animateOrbit);
+                    }
+                }
+                animateOrbit();
+
+                // Mostrar indicador visual
+                const indicator = document.getElementById('orbit-indicator');
+                indicator.style.left = event.clientX - rect.left + 'px';
+                indicator.style.top = event.clientY - rect.top + 'px';
+                indicator.style.display = 'block';
+                setTimeout(() => { indicator.style.display = 'none'; }, 500);
+
+                log(`Órbita centralizada em (${point.x.toFixed(1)}, ${point.y.toFixed(1)}, ${point.z.toFixed(1)})`, 'success');
+            } else {
+                log('Clique em um ponto do modelo para centralizar', 'warning');
+            }
+        }
+
+        // Centralizar órbita no centro do modelo
+        function centerOrbitOnModel() {
+            if (!currentModel) return;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+
+            const startTarget = controls.target.clone();
+            const duration = 300;
+            const startTime = Date.now();
+
+            function animateOrbit() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+
+                controls.target.lerpVectors(startTarget, center, eased);
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateOrbit);
+                }
+            }
+            animateOrbit();
+            log('Órbita centralizada no modelo', 'success');
+        }
+
         // Event listeners
         document.getElementById('file-input').addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -407,7 +520,11 @@
             }
         });
         document.getElementById('btn-fit').addEventListener('click', fitModel);
+        document.getElementById('btn-center-orbit').addEventListener('click', centerOrbitOnModel);
         document.getElementById('btn-grid').addEventListener('click', toggleGrid);
+
+        // Duplo clique para centralizar órbita
+        document.getElementById('canvas').addEventListener('dblclick', setOrbitCenter);
 
         // Iniciar
         async function main() {
