@@ -739,8 +739,28 @@
                 log(`Baixando: ${name}`, 'info');
                 showLoading('Baixando modelo...', 30);
 
-                // Baixar o arquivo IFC
-                const response = await fetch(url);
+                // Usar proxy CORS para contornar restrições do GitHub Releases
+                // Tenta primeiro sem proxy (caso funcione), depois com proxy
+                let response;
+                let fetchUrl = url;
+
+                try {
+                    // Primeira tentativa: direto (pode funcionar em alguns casos)
+                    response = await fetch(url);
+                } catch (corsError) {
+                    // Se falhar por CORS, usar proxy
+                    log('Usando proxy CORS...', 'info');
+                    // Proxy alternativo: corsproxy.io
+                    fetchUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    response = await fetch(fetchUrl);
+                }
+
+                // Se ainda não funcionou, tentar outro proxy
+                if (!response.ok) {
+                    log('Tentando proxy alternativo...', 'info');
+                    fetchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    response = await fetch(fetchUrl);
+                }
                 if (!response.ok) {
                     throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
                 }
