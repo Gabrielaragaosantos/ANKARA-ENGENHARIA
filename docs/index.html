@@ -3,130 +3,423 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador IFC - UNILA</title>
+    <title>Galeria de Modelos IFC - Consórcio MPD/Ankara</title>
     <style>
         /* ====== TEMA CONSÓRCIO MPD/ANKARA ====== */
         :root {
-            --cor-primaria: #E65100;      /* Laranja forte */
-            --cor-secundaria: #8B4513;    /* Marrom/Terracota */
-            --cor-accent: #FFB300;        /* Amarelo/Dourado */
-            --cor-dark: #1a1a1a;          /* Preto/Cinza escuro */
-            --cor-sidebar: #2d2d2d;       /* Fundo sidebar */
-            --cor-panel: #3d3d3d;         /* Fundo painéis */
-            --cor-text: #ffffff;          /* Texto branco */
-            --cor-text-muted: #b0b0b0;    /* Texto secundário */
+            --cor-primaria: #E65100;
+            --cor-secundaria: #8B4513;
+            --cor-accent: #FFB300;
+            --cor-dark: #1a1a1a;
+            --cor-card: #2d2d2d;
+            --cor-card-hover: #3d3d3d;
+            --cor-text: #ffffff;
+            --cor-text-muted: #b0b0b0;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--cor-dark);
             color: var(--cor-text);
-            overflow: hidden;
-        }
-        #app { display: flex; height: 100vh; }
-        #sidebar {
-            width: 320px;
-            background: var(--cor-sidebar);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            overflow-y: auto;
+            min-height: 100vh;
         }
 
-        /* Header com logos */
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--cor-card) 0%, #1a1a1a 100%);
+            padding: 30px 20px;
+            border-bottom: 3px solid var(--cor-primaria);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
         .header-logos {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
-            border-bottom: 2px solid var(--cor-primaria);
-            margin-bottom: 5px;
-        }
-        .logo-consorcio {
-            height: 60px;
-            width: auto;
-        }
-        .logo-unila {
-            height: 50px;
-            width: auto;
+            gap: 30px;
         }
 
-        #sidebar h1 {
-            font-size: 1.3em;
+        .logo-consorcio { height: 70px; width: auto; }
+        .logo-unila { height: 60px; width: auto; }
+
+        .header-title {
+            text-align: center;
+            flex: 1;
+        }
+
+        .header-title h1 {
+            font-size: 2em;
             color: var(--cor-primaria);
-            padding-bottom: 5px;
-            text-align: center;
+            margin-bottom: 5px;
         }
-        #sidebar .subtitle {
-            font-size: 0.95em;
+
+        .header-title p {
             color: var(--cor-accent);
-            text-align: center;
-            margin-top: -5px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--cor-secundaria);
+            font-size: 1.1em;
         }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        /* Botões */
         .btn {
             background: var(--cor-primaria);
             color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
+            padding: 12px 24px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            transition: background 0.3s;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        .btn:hover { background: #BF360C; }
-        .btn:disabled { background: #555; cursor: not-allowed; }
-        .btn-secondary { background: var(--cor-secundaria); }
-        .btn-secondary:hover { background: #6D3410; }
-        #file-input { display: none; }
-        #viewer-container { flex: 1; position: relative; }
-        #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
-        #canvas:active { cursor: grabbing; }
 
-        /* Indicador de ponto de órbita */
-        #orbit-indicator {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 3px solid var(--cor-primaria);
-            border-radius: 50%;
-            pointer-events: none;
-            transform: translate(-50%, -50%);
-            display: none;
-            z-index: 50;
-            animation: pulse 0.5s ease-out;
+        .btn:hover {
+            background: #BF360C;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(230, 81, 0, 0.3);
         }
-        #orbit-indicator::before {
-            content: '';
+
+        .btn-secondary {
+            background: var(--cor-secundaria);
+        }
+
+        .btn-secondary:hover {
+            background: #6D3410;
+        }
+
+        /* Main content */
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        /* Filtros */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-group label {
+            color: var(--cor-text-muted);
+            font-size: 14px;
+        }
+
+        .filter-select {
+            background: var(--cor-card);
+            color: var(--cor-text);
+            border: 1px solid #444;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--cor-primaria);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: var(--cor-card);
+            color: var(--cor-text);
+            border: 1px solid #444;
+            padding: 10px 15px 10px 40px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--cor-primaria);
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box::before {
+            content: '🔍';
             position: absolute;
+            left: 12px;
             top: 50%;
-            left: 50%;
-            width: 6px;
-            height: 6px;
+            transform: translateY(-50%);
+            font-size: 16px;
+        }
+
+        /* Contador de resultados */
+        .results-count {
+            color: var(--cor-text-muted);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .results-count span {
+            color: var(--cor-accent);
+            font-weight: bold;
+        }
+
+        /* Grid de modelos */
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 25px;
+        }
+
+        /* Card de modelo */
+        .model-card {
+            background: var(--cor-card);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+
+        .model-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--cor-primaria);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .model-thumbnail {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #3d3d3d 0%, #2d2d2d 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--cor-text-muted);
+            font-size: 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .model-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .model-thumbnail .placeholder {
+            font-size: 60px;
+        }
+
+        .model-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
             background: var(--cor-primaria);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
         }
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
-            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
+        .model-content {
+            padding: 20px;
         }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 30px 50px;
-            border-radius: 10px;
+
+        .model-project {
+            color: var(--cor-accent);
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--cor-text);
+            margin-bottom: 8px;
+        }
+
+        .model-description {
+            color: var(--cor-text-muted);
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            min-height: 40px;
+        }
+
+        .model-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .model-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--cor-text-muted);
+            font-size: 12px;
+        }
+
+        .model-meta-item .icon {
+            font-size: 14px;
+        }
+
+        .model-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .model-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 10px 15px;
+            font-size: 13px;
+        }
+
+        /* Estado vazio */
+        .empty-state {
             text-align: center;
-            display: none;
-            z-index: 100;
+            padding: 60px 20px;
+            color: var(--cor-text-muted);
         }
-        #loading.active { display: block; }
+
+        .empty-state .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            color: var(--cor-text);
+        }
+
+        .empty-state p {
+            font-size: 14px;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--cor-card);
+            padding: 30px 20px;
+            text-align: center;
+            border-top: 1px solid #333;
+            margin-top: 50px;
+        }
+
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .footer-info {
+            margin-bottom: 15px;
+        }
+
+        .footer-info .dev-name {
+            color: var(--cor-secundaria);
+            font-weight: bold;
+        }
+
+        .footer-info .dev-email {
+            color: var(--cor-primaria);
+        }
+
+        .footer-info .dev-role {
+            color: var(--cor-text-muted);
+            font-style: italic;
+        }
+
+        .footer-text {
+            color: var(--cor-text-muted);
+            font-size: 12px;
+        }
+
+        /* Responsivo */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .header-logos {
+                justify-content: center;
+            }
+
+            .header-actions {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group, .search-box {
+                width: 100%;
+            }
+
+            .filter-select {
+                width: 100%;
+            }
+
+            .models-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
         .spinner {
             width: 50px;
             height: 50px;
@@ -134,1367 +427,214 @@
             border-top: 4px solid var(--cor-primaria);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
         }
+
         @keyframes spin { to { transform: rotate(360deg); } }
-        #info-panel {
-            background: var(--cor-panel);
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-primaria);
-        }
-        #info-panel.active { display: block; }
-        #info-panel h3 { color: var(--cor-primaria); margin-bottom: 10px; }
-        #info-panel p { margin: 5px 0; font-size: 13px; }
-
-        /* Painel de seleção */
-        #selection-panel {
-            background: var(--cor-panel);
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-accent);
-        }
-        #selection-panel.active { display: block; }
-        #selection-panel h3 { color: var(--cor-accent); margin-bottom: 10px; font-size: 14px; }
-        #selection-panel p { margin: 4px 0; font-size: 12px; }
-        #selection-panel .label { color: var(--cor-text-muted); }
-        #selection-panel .value { color: var(--cor-text); }
-        #btn-clear-selection {
-            margin-top: 10px;
-            background: #c62828;
-            padding: 8px 12px;
-            font-size: 12px;
-        }
-        #btn-clear-selection:hover { background: #b71c1c; }
-
-        /* Botões de ação do elemento */
-        .selection-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-            flex-wrap: wrap;
-        }
-        .selection-actions .btn {
-            flex: 1;
-            min-width: 80px;
-            padding: 8px 10px;
-            font-size: 11px;
-        }
-        .btn-hide { background: var(--cor-secundaria); }
-        .btn-hide:hover { background: #6D3410; }
-        .btn-isolate { background: var(--cor-accent); color: #000; }
-        .btn-isolate:hover { background: #FF8F00; }
-        .btn-show-all { background: #558B2F; }
-        .btn-show-all:hover { background: #33691E; }
-
-        /* Contador de elementos ocultos */
-        #hidden-counter {
-            background: var(--cor-panel);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            display: none;
-            text-align: center;
-        }
-        #hidden-counter.active { display: block; }
-        #hidden-counter span { color: var(--cor-accent); font-weight: bold; }
-
-        /* Controle de transparência */
-        #transparency-panel {
-            background: var(--cor-panel);
-            padding: 12px 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-secundaria);
-        }
-        #transparency-panel.active { display: block; }
-        #transparency-panel h4 {
-            color: var(--cor-secundaria);
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .slider-container input[type="range"] {
-            flex: 1;
-            height: 6px;
-            -webkit-appearance: none;
-            background: #555;
-            border-radius: 3px;
-            outline: none;
-        }
-        .slider-container input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            background: var(--cor-primaria);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        .slider-container input[type="range"]::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            background: var(--cor-primaria);
-            border-radius: 50%;
-            cursor: pointer;
-            border: none;
-        }
-        .slider-value {
-            min-width: 45px;
-            text-align: right;
-            font-size: 12px;
-            color: var(--cor-primaria);
-            font-weight: bold;
-        }
-
-        /* Painel de plano de corte */
-        #clipping-panel {
-            background: var(--cor-panel);
-            padding: 12px 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-primaria);
-        }
-        #clipping-panel.active { display: block; }
-        #clipping-panel h4 {
-            color: var(--cor-primaria);
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-        .clipping-controls {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .clipping-axis {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .clipping-axis label {
-            min-width: 20px;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        .clipping-axis input[type="range"] {
-            flex: 1;
-            height: 6px;
-            -webkit-appearance: none;
-            background: #555;
-            border-radius: 3px;
-        }
-        .clipping-axis input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
-            background: var(--cor-primaria);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        .axis-x { color: #f44336; }
-        .axis-y { color: #558B2F; }
-        .axis-z { color: #1565C0; }
-        .clipping-buttons {
-            display: flex;
-            gap: 8px;
-            margin-top: 5px;
-        }
-        .clipping-buttons .btn {
-            flex: 1;
-            padding: 6px 10px;
-            font-size: 11px;
-        }
-        .btn-clip-toggle { background: var(--cor-primaria); }
-        .btn-clip-toggle:hover { background: #BF360C; }
-        .btn-clip-toggle.active { background: #558B2F; }
-        .btn-clip-reset { background: #546E7A; }
-        .btn-clip-reset:hover { background: #37474F; }
-        .btn-clip-flip { background: var(--cor-secundaria); }
-        .btn-clip-flip:hover { background: #6D3410; }
-
-        /* Painel de medição */
-        #measure-panel {
-            background: var(--cor-panel);
-            padding: 12px 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-accent);
-        }
-        #measure-panel.active { display: block; }
-        #measure-panel h4 {
-            color: var(--cor-accent);
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-        .measure-result {
-            background: #1a1a1a;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-        .measure-result .distance {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--cor-accent);
-        }
-        .measure-result .unit {
-            font-size: 14px;
-            color: var(--cor-text-muted);
-        }
-        .measure-points {
-            font-size: 11px;
-            color: var(--cor-text-muted);
-            margin-top: 5px;
-        }
-        .measure-buttons {
-            display: flex;
-            gap: 8px;
-        }
-        .measure-buttons .btn {
-            flex: 1;
-            padding: 8px 10px;
-            font-size: 11px;
-        }
-        .btn-measure { background: var(--cor-accent); color: #000; }
-        .btn-measure:hover { background: #FF8F00; }
-        .btn-measure.active { background: #558B2F; color: #fff; }
-        .btn-measure-clear { background: #546E7A; }
-        .btn-measure-clear:hover { background: #37474F; }
-        #canvas.measuring { cursor: crosshair !important; }
-
-        /* Painel de vistas */
-        #views-panel {
-            background: var(--cor-panel);
-            padding: 12px 15px;
-            border-radius: 8px;
-            display: none;
-            border-left: 3px solid var(--cor-secundaria);
-        }
-        #views-panel.active { display: block; }
-        #views-panel h4 {
-            color: var(--cor-secundaria);
-            margin-bottom: 10px;
-            font-size: 13px;
-        }
-        .views-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-        }
-        .views-grid .btn {
-            padding: 10px 8px;
-            font-size: 11px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-        .views-grid .btn .icon {
-            font-size: 18px;
-        }
-        .btn-view { background: var(--cor-secundaria); }
-        .btn-view:hover { background: #6D3410; }
-        #debug {
-            background: #1a1a1a;
-            padding: 10px;
-            border-radius: 8px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 11px;
-        }
-        .log-success { color: #558B2F; }
-        .log-error { color: #c62828; }
-        .log-warning { color: var(--cor-accent); }
-        .log-info { color: var(--cor-primaria); }
-
-        /* Responsivo para mobile */
-        @media (max-width: 768px) {
-            #app { flex-direction: column; }
-            #sidebar {
-                width: 100%;
-                height: auto;
-                max-height: 40vh;
-                order: 2;
-            }
-            #viewer-container { order: 1; height: 60vh; }
-        }
-
-        /* Footer com creditos */
-        .credits {
-            margin-top: auto;
-            padding-top: 15px;
-            border-top: 1px solid #444;
-            font-size: 11px;
-            color: var(--cor-text-muted);
-            text-align: center;
-        }
-        .credits a { color: var(--cor-primaria); text-decoration: none; }
-        .credits a:hover { text-decoration: underline; }
-        .credits .dev-info {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #333;
-            line-height: 1.6;
-        }
-        .credits .dev-name {
-            color: var(--cor-secundaria);
-            font-weight: bold;
-            font-size: 12px;
-        }
-        .credits .dev-email {
-            color: var(--cor-primaria);
-        }
-        .credits .dev-role {
-            color: var(--cor-text-muted);
-            font-style: italic;
-        }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div id="sidebar">
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <header>
+        <div class="header-content">
             <div class="header-logos">
                 <img src="logo-consorcio.png" alt="Consórcio MPD/Ankara" class="logo-consorcio" onerror="this.style.display='none'">
                 <img src="logo-unila.png" alt="UNILA" class="logo-unila" onerror="this.style.display='none'">
             </div>
-            <h1>🏗️ Visualizador IFC UNILA</h1>
-            <p class="subtitle">Consórcio MPD/Ankara</p>
-            <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
-            <input type="file" id="file-input" accept=".ifc">
-            <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
-            <button id="btn-center-orbit" class="btn btn-secondary" disabled>🔄 Centralizar Órbita</button>
-            <button id="btn-grid" class="btn btn-secondary">📐 Toggle Grid</button>
-            <p id="orbit-hint" style="font-size: 11px; color: #888; display: none;">💡 Duplo clique no modelo para definir centro de órbita</p>
-            <div id="info-panel">
-                <h3>Informações do Modelo</h3>
-                <p id="info-name">-</p>
-                <p id="info-elements">-</p>
-                <p id="info-size">-</p>
+            <div class="header-title">
+                <h1>🏗️ Galeria de Modelos IFC</h1>
+                <p>Consórcio MPD/Ankara</p>
             </div>
-            <div id="selection-panel">
-                <h3>🎯 Elemento Selecionado</h3>
-                <p><span class="label">ID:</span> <span class="value" id="sel-id">-</span></p>
-                <p><span class="label">Posição:</span> <span class="value" id="sel-position">-</span></p>
-                <p><span class="label">Dimensões:</span> <span class="value" id="sel-size">-</span></p>
-                <div class="selection-actions">
-                    <button id="btn-hide-element" class="btn btn-hide">👁‍🗨 Ocultar</button>
-                    <button id="btn-isolate-element" class="btn btn-isolate">🎯 Isolar</button>
-                </div>
-                <button id="btn-clear-selection" class="btn">✖ Limpar Seleção</button>
-            </div>
-            <div id="hidden-counter">
-                <span id="hidden-count">0</span> elementos ocultos
-                <button id="btn-show-all" class="btn btn-show-all" style="margin-top: 8px; width: 100%;">👁 Mostrar Todos</button>
-            </div>
-            <div id="transparency-panel">
-                <h4>🔮 Transparência do Modelo</h4>
-                <div class="slider-container">
-                    <input type="range" id="transparency-slider" min="0" max="100" value="100">
-                    <span class="slider-value" id="transparency-value">100%</span>
-                </div>
-            </div>
-            <div id="clipping-panel">
-                <h4>✂️ Plano de Corte</h4>
-                <div class="clipping-controls">
-                    <div class="clipping-axis">
-                        <label class="axis-x">X</label>
-                        <input type="range" id="clip-x" min="0" max="100" value="100">
-                    </div>
-                    <div class="clipping-axis">
-                        <label class="axis-y">Y</label>
-                        <input type="range" id="clip-y" min="0" max="100" value="100">
-                    </div>
-                    <div class="clipping-axis">
-                        <label class="axis-z">Z</label>
-                        <input type="range" id="clip-z" min="0" max="100" value="100">
-                    </div>
-                    <div class="clipping-buttons">
-                        <button id="btn-clip-toggle" class="btn btn-clip-toggle">✂️ Ativar</button>
-                        <button id="btn-clip-flip" class="btn btn-clip-flip">🔄 Inverter</button>
-                        <button id="btn-clip-reset" class="btn btn-clip-reset">↩️ Reset</button>
-                    </div>
-                </div>
-            </div>
-            <div id="measure-panel">
-                <h4>📏 Ferramenta de Medição</h4>
-                <div class="measure-result">
-                    <span class="distance" id="measure-distance">-</span>
-                    <span class="unit">metros</span>
-                    <div class="measure-points" id="measure-points">Clique em dois pontos para medir</div>
-                </div>
-                <div class="measure-buttons">
-                    <button id="btn-measure-toggle" class="btn btn-measure">📏 Medir</button>
-                    <button id="btn-measure-clear" class="btn btn-measure-clear">🗑️ Limpar</button>
-                </div>
-            </div>
-            <div id="views-panel">
-                <h4>👁️ Vistas Predefinidas</h4>
-                <div class="views-grid">
-                    <button id="btn-view-front" class="btn btn-view"><span class="icon">⬆️</span>Frontal</button>
-                    <button id="btn-view-back" class="btn btn-view"><span class="icon">⬇️</span>Traseira</button>
-                    <button id="btn-view-left" class="btn btn-view"><span class="icon">⬅️</span>Esquerda</button>
-                    <button id="btn-view-right" class="btn btn-view"><span class="icon">➡️</span>Direita</button>
-                    <button id="btn-view-top" class="btn btn-view"><span class="icon">🔝</span>Topo</button>
-                    <button id="btn-view-bottom" class="btn btn-view"><span class="icon">🔻</span>Inferior</button>
-                    <button id="btn-view-iso" class="btn btn-view" style="grid-column: span 2;"><span class="icon">📐</span>Isométrica</button>
-                </div>
-            </div>
-            <div id="debug">
-                <div class="log-info">[Sistema] Aguardando inicialização...</div>
-            </div>
-            <div class="credits">
-                Desenvolvido para UNILA<br>
-                Powered by Three.js + web-ifc
-                <div class="dev-info">
-                    <span class="dev-name">Gabriel Aragão Santos</span><br>
-                    <a href="mailto:gabriel.santos@ankaraengenharia.com.br" class="dev-email">gabriel.santos@ankaraengenharia.com.br</a><br>
-                    <span class="dev-role">Arquiteto</span>
-                </div>
+            <div class="header-actions">
+                <a href="visualizador-unila.html" class="btn btn-secondary">
+                    📂 Visualizador com Upload
+                </a>
             </div>
         </div>
-        <div id="viewer-container">
-            <canvas id="canvas"></canvas>
-            <div id="orbit-indicator"></div>
-            <div id="loading">
-                <div class="spinner"></div>
-                <p id="loading-text">Carregando...</p>
+    </header>
+
+    <main>
+        <div class="filters">
+            <div class="filter-group">
+                <label for="projeto-filter">Projeto:</label>
+                <select id="projeto-filter" class="filter-select">
+                    <option value="todos">🏢 Todos os Projetos</option>
+                </select>
+            </div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Buscar modelo...">
             </div>
         </div>
-    </div>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/"
-        }
-    }
-    </script>
+        <p class="results-count">Mostrando <span id="count">0</span> modelos</p>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        <div class="models-grid" id="models-grid">
+            <!-- Os cards serão inseridos aqui dinamicamente -->
+        </div>
 
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <div class="icon">📭</div>
+            <h3>Nenhum modelo encontrado</h3>
+            <p>Tente ajustar os filtros ou adicione novos modelos ao catálogo.</p>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-info">
+                <span class="dev-name">Gabriel Aragão Santos</span><br>
+                <a href="mailto:gabriel.santos@ankaraengenharia.com.br" class="dev-email">gabriel.santos@ankaraengenharia.com.br</a><br>
+                <span class="dev-role">Arquiteto</span>
+            </div>
+            <p class="footer-text">
+                Galeria de Modelos IFC | Powered by Three.js + web-ifc
+            </p>
+        </div>
+    </footer>
+
+    <script>
         // Variáveis globais
-        let scene, camera, renderer, controls, gridHelper;
-        let ifcAPI = null;
-        let currentModel = null;
-        let raycaster = new THREE.Raycaster();
-        let mouse = new THREE.Vector2();
+        let catalogo = { projetos: [], modelos: [] };
+        let filteredModels = [];
 
-        // Seleção de elementos
-        let selectedMesh = null;
-        let originalMaterial = null;
-        const selectionColor = new THREE.Color(0xFF9800); // Laranja
-        const selectionMaterial = new THREE.MeshPhongMaterial({
-            color: selectionColor,
-            emissive: selectionColor,
-            emissiveIntensity: 0.3,
-            side: THREE.DoubleSide
-        });
-
-        // Controle de visibilidade
-        let hiddenMeshes = new Set();
-
-        // Controle de transparência
-        let globalOpacity = 1.0;
-        let originalOpacities = new Map();
-
-        // Plano de corte
-        let clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
-        let clippingEnabled = false;
-        let clippingFlipped = false;
-        let modelBounds = { min: new THREE.Vector3(), max: new THREE.Vector3() };
-        let currentClipAxis = 'x';
-
-        // Ferramenta de medição
-        let measureMode = false;
-        let measurePoint1 = null;
-        let measurePoint2 = null;
-        let measureLine = null;
-        let measureSpheres = [];
-        const measureMaterial = new THREE.LineBasicMaterial({ color: 0xFFEB3B, linewidth: 2 });
-        const measureSphereMaterial = new THREE.MeshBasicMaterial({ color: 0xFFEB3B });
-
-        // Logger
-        function log(msg, type = 'info') {
-            const debug = document.getElementById('debug');
-            const div = document.createElement('div');
-            div.className = `log-${type}`;
-            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debug.appendChild(div);
-            debug.scrollTop = debug.scrollHeight;
-            console.log(`[${type.toUpperCase()}] ${msg}`);
-        }
-
-        function showLoading(text) {
-            document.getElementById('loading').classList.add('active');
-            document.getElementById('loading-text').textContent = text;
-        }
-
-        function hideLoading() {
-            document.getElementById('loading').classList.remove('active');
-        }
-
-        // Inicializar Three.js
-        function initThreeJS() {
-            log('Inicializando Three.js...', 'info');
-            const container = document.getElementById('viewer-container');
-            const canvas = document.getElementById('canvas');
-
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a1a);
-
-            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
-            camera.position.set(50, 50, 50);
-
-            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-            renderer.setSize(container.clientWidth, container.clientHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.localClippingEnabled = true;
-
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-
-            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-            const dir1 = new THREE.DirectionalLight(0xffffff, 0.8);
-            dir1.position.set(50, 100, 50);
-            scene.add(dir1);
-            const dir2 = new THREE.DirectionalLight(0xffffff, 0.4);
-            dir2.position.set(-50, 50, -50);
-            scene.add(dir2);
-
-            gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
-            scene.add(gridHelper);
-            scene.add(new THREE.AxesHelper(10));
-
-            window.addEventListener('resize', () => {
-                camera.aspect = container.clientWidth / container.clientHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(container.clientWidth, container.clientHeight);
-            });
-
-            function animate() {
-                requestAnimationFrame(animate);
-                controls.update();
-                renderer.render(scene, camera);
-            }
-            animate();
-
-            log('Three.js inicializado!', 'success');
-        }
-
-        // Inicializar web-ifc via ES Module
-        async function initWebIFC() {
-            log('Carregando web-ifc...', 'info');
-            showLoading('Carregando motor IFC...');
-
+        // Carregar catálogo
+        async function loadCatalogo() {
             try {
-                // Importar web-ifc como ES Module
-                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                log('Módulo web-ifc importado', 'success');
+                const response = await fetch('modelos/catalogo.json');
+                if (!response.ok) throw new Error('Catálogo não encontrado');
+                catalogo = await response.json();
 
-                ifcAPI = new WebIFC.IfcAPI();
-                ifcAPI.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/');
+                // Popular dropdown de projetos
+                populateProjectFilter();
 
-                log('Inicializando WASM...', 'info');
-                await ifcAPI.Init();
-
-                log('web-ifc pronto!', 'success');
-                hideLoading();
-            } catch (err) {
-                log(`Erro ao carregar web-ifc: ${err.message}`, 'error');
-                console.error(err);
-                hideLoading();
-                throw err;
-            }
-        }
-
-        // Carregar IFC
-        async function loadIFC(file) {
-            if (!ifcAPI) {
-                alert('Motor IFC não inicializado. Recarregue a página.');
-                return;
-            }
-
-            try {
-                log(`Carregando: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
-                showLoading('Lendo arquivo...');
-
-                // Limpar modelo anterior
-                if (currentModel) {
-                    scene.remove(currentModel);
-                    currentModel.traverse((child) => {
-                        if (child.geometry) child.geometry.dispose();
-                        if (child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(m => m.dispose());
-                            } else {
-                                child.material.dispose();
-                            }
-                        }
-                    });
-                    currentModel = null;
-                }
-
-                // Limpar estados
-                clearSelection(false);
-                hiddenMeshes.clear();
-                updateHiddenCounter();
-                originalOpacities.clear();
-                globalOpacity = 1.0;
-                document.getElementById('transparency-slider').value = 100;
-                document.getElementById('transparency-value').textContent = '100%';
-
-                // Reset clipping
-                clippingEnabled = false;
-                clippingFlipped = false;
-                document.getElementById('btn-clip-toggle').textContent = '✂️ Ativar';
-                document.getElementById('btn-clip-toggle').classList.remove('active');
-                document.getElementById('clip-x').value = 100;
-                document.getElementById('clip-y').value = 100;
-                document.getElementById('clip-z').value = 100;
-
-                // Reset medição
-                clearMeasurement();
-                if (measureMode) toggleMeasureMode();
-
-                const data = new Uint8Array(await file.arrayBuffer());
-                log(`Arquivo lido: ${data.length} bytes`, 'info');
-
-                showLoading('Processando IFC...');
-
-                const modelID = ifcAPI.OpenModel(data);
-                log(`Modelo aberto (ID: ${modelID})`, 'success');
-
-                showLoading('Gerando geometrias...');
-
-                const modelGroup = new THREE.Group();
-                let meshCount = 0;
-
-                ifcAPI.StreamAllMeshes(modelID, (mesh) => {
-                    const geoms = mesh.geometries;
-                    for (let i = 0; i < geoms.size(); i++) {
-                        const pg = geoms.get(i);
-                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
-                        const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
-                        const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
-
-                        if (vData.length === 0) {
-                            geom.delete();
-                            continue;
-                        }
-
-                        const positions = [];
-                        const normals = [];
-                        for (let j = 0; j < vData.length; j += 6) {
-                            positions.push(vData[j], vData[j+1], vData[j+2]);
-                            normals.push(vData[j+3], vData[j+4], vData[j+5]);
-                        }
-
-                        const bufferGeom = new THREE.BufferGeometry();
-                        bufferGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                        bufferGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-                        if (iData.length > 0) {
-                            bufferGeom.setIndex(Array.from(iData));
-                        }
-
-                        const c = pg.color;
-                        const mat = new THREE.MeshPhongMaterial({
-                            color: new THREE.Color(c.x, c.y, c.z),
-                            opacity: c.w,
-                            transparent: c.w < 1,
-                            side: THREE.DoubleSide
-                        });
-
-                        const threeMesh = new THREE.Mesh(bufferGeom, mat);
-                        const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
-                        threeMesh.applyMatrix4(matrix);
-
-                        modelGroup.add(threeMesh);
-                        meshCount++;
-                        geom.delete();
-                    }
-                });
-
-                log(`Gerados ${meshCount} meshes`, 'success');
-
-                scene.add(modelGroup);
-                currentModel = modelGroup;
-
-                const box = new THREE.Box3().setFromObject(modelGroup);
-                const center = new THREE.Vector3();
-                const size = new THREE.Vector3();
-                box.getCenter(center);
-                box.getSize(size);
-
-                const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
-                controls.target.copy(center);
-                controls.update();
-
-                document.getElementById('info-panel').classList.add('active');
-                document.getElementById('info-name').textContent = `Arquivo: ${file.name}`;
-                document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
-                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
-                document.getElementById('btn-fit').disabled = false;
-                document.getElementById('btn-center-orbit').disabled = false;
-                document.getElementById('orbit-hint').style.display = 'block';
-                document.getElementById('transparency-panel').classList.add('active');
-                document.getElementById('clipping-panel').classList.add('active');
-                document.getElementById('measure-panel').classList.add('active');
-                document.getElementById('views-panel').classList.add('active');
-                updateModelBounds();
-
-                ifcAPI.CloseModel(modelID);
-                hideLoading();
-                log('Modelo carregado com sucesso!', 'success');
+                // Mostrar todos os modelos
+                filterModels();
 
             } catch (error) {
-                log(`ERRO: ${error.message}`, 'error');
-                console.error(error);
-                hideLoading();
-                alert(`Erro ao carregar IFC:\n\n${error.message}`);
+                console.error('Erro ao carregar catálogo:', error);
+                showEmptyState();
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
             }
         }
 
-        function fitModel() {
-            if (!currentModel) return;
-            const box = new THREE.Box3().setFromObject(currentModel);
-            const center = new THREE.Vector3();
-            const size = new THREE.Vector3();
-            box.getCenter(center);
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
-            controls.target.copy(center);
-            controls.update();
-            log('Modelo enquadrado', 'info');
-        }
+        // Popular dropdown de projetos
+        function populateProjectFilter() {
+            const select = document.getElementById('projeto-filter');
+            select.innerHTML = '<option value="todos">🏢 Todos os Projetos</option>';
 
-        let gridVisible = true;
-        function toggleGrid() {
-            gridVisible = !gridVisible;
-            gridHelper.visible = gridVisible;
-            log(`Grid ${gridVisible ? 'visível' : 'oculto'}`, 'info');
-        }
-
-        // Centralizar órbita no ponto clicado
-        function setOrbitCenter(event) {
-            if (!currentModel) return;
-
-            const container = document.getElementById('viewer-container');
-            const rect = container.getBoundingClientRect();
-
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(currentModel, true);
-
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-
-                // Animar a transição do centro de órbita
-                const startTarget = controls.target.clone();
-                const endTarget = point.clone();
-                const duration = 300;
-                const startTime = Date.now();
-
-                function animateOrbit() {
-                    const elapsed = Date.now() - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-
-                    controls.target.lerpVectors(startTarget, endTarget, eased);
-                    controls.update();
-
-                    if (progress < 1) {
-                        requestAnimationFrame(animateOrbit);
-                    }
+            catalogo.projetos.forEach(projeto => {
+                if (projeto.id !== 'todos') {
+                    const option = document.createElement('option');
+                    option.value = projeto.id;
+                    option.textContent = `${projeto.icone || '📁'} ${projeto.nome}`;
+                    select.appendChild(option);
                 }
-                animateOrbit();
-
-                // Mostrar indicador visual
-                const indicator = document.getElementById('orbit-indicator');
-                indicator.style.left = event.clientX - rect.left + 'px';
-                indicator.style.top = event.clientY - rect.top + 'px';
-                indicator.style.display = 'block';
-                setTimeout(() => { indicator.style.display = 'none'; }, 500);
-
-                log(`Órbita centralizada em (${point.x.toFixed(1)}, ${point.y.toFixed(1)}, ${point.z.toFixed(1)})`, 'success');
-            } else {
-                log('Clique em um ponto do modelo para centralizar', 'warning');
-            }
+            });
         }
 
-        // Centralizar órbita no centro do modelo
-        function centerOrbitOnModel() {
-            if (!currentModel) return;
-            const box = new THREE.Box3().setFromObject(currentModel);
-            const center = new THREE.Vector3();
-            box.getCenter(center);
+        // Filtrar modelos
+        function filterModels() {
+            const projetoId = document.getElementById('projeto-filter').value;
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
 
-            const startTarget = controls.target.clone();
-            const duration = 300;
-            const startTime = Date.now();
+            filteredModels = catalogo.modelos.filter(modelo => {
+                // Filtrar por projeto
+                const matchProjeto = projetoId === 'todos' || modelo.projeto === projetoId;
 
-            function animateOrbit() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const eased = 1 - Math.pow(1 - progress, 3);
+                // Filtrar por busca
+                const matchSearch = !searchTerm ||
+                    modelo.nome.toLowerCase().includes(searchTerm) ||
+                    modelo.descricao.toLowerCase().includes(searchTerm);
 
-                controls.target.lerpVectors(startTarget, center, eased);
-                controls.update();
+                // Só mostrar modelos com URL válida
+                const hasUrl = modelo.url && modelo.url.length > 0;
 
-                if (progress < 1) {
-                    requestAnimationFrame(animateOrbit);
-                }
-            }
-            animateOrbit();
-            log('Órbita centralizada no modelo', 'success');
+                return matchProjeto && matchSearch && hasUrl;
+            });
+
+            renderModels();
         }
 
-        // Selecionar elemento
-        function selectElement(event) {
-            // Se estiver em modo de medição, usar handler de medição
-            if (measureMode) {
-                handleMeasureClick(event);
+        // Renderizar modelos
+        function renderModels() {
+            const grid = document.getElementById('models-grid');
+            const emptyState = document.getElementById('empty-state');
+            const count = document.getElementById('count');
+
+            count.textContent = filteredModels.length;
+
+            if (filteredModels.length === 0) {
+                grid.innerHTML = '';
+                emptyState.style.display = 'block';
                 return;
             }
 
-            if (!currentModel) return;
+            emptyState.style.display = 'none';
 
-            const container = document.getElementById('viewer-container');
-            const rect = container.getBoundingClientRect();
+            grid.innerHTML = filteredModels.map(modelo => {
+                const projeto = catalogo.projetos.find(p => p.id === modelo.projeto);
+                const projetoNome = projeto ? projeto.nome : 'Outro';
+                const projetoIcone = projeto ? projeto.icone : '📁';
 
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                const thumbnailHtml = modelo.thumbnail && modelo.thumbnail !== 'modelos/thumbnails/placeholder.png'
+                    ? `<img src="${modelo.thumbnail}" alt="${modelo.nome}" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>🏗️</div>'">`
+                    : '<div class="placeholder">🏗️</div>';
 
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(currentModel, true);
+                const viewerUrl = `viewer.html?modelo=${encodeURIComponent(modelo.url)}&nome=${encodeURIComponent(modelo.nome)}`;
 
-            if (intersects.length > 0) {
-                const mesh = intersects[0].object;
-
-                // Se clicou no mesmo elemento, não faz nada
-                if (mesh === selectedMesh) return;
-
-                // Restaurar material do elemento anterior
-                clearSelection(false);
-
-                // Guardar referência e material original
-                selectedMesh = mesh;
-                originalMaterial = mesh.material;
-
-                // Aplicar material de seleção
-                mesh.material = selectionMaterial;
-
-                // Calcular informações do elemento
-                const box = new THREE.Box3().setFromObject(mesh);
-                const center = new THREE.Vector3();
-                const size = new THREE.Vector3();
-                box.getCenter(center);
-                box.getSize(size);
-
-                // Atualizar painel de seleção
-                document.getElementById('selection-panel').classList.add('active');
-                document.getElementById('sel-id').textContent = `Mesh #${currentModel.children.indexOf(mesh)}`;
-                document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
-                document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
-
-                log(`Elemento selecionado: Mesh #${currentModel.children.indexOf(mesh)}`, 'success');
-            } else {
-                // Clicou no vazio - limpar seleção
-                clearSelection(true);
-            }
+                return `
+                    <div class="model-card">
+                        <div class="model-thumbnail">
+                            ${thumbnailHtml}
+                            <span class="model-badge">${modelo.formato || 'IFC'}</span>
+                        </div>
+                        <div class="model-content">
+                            <div class="model-project">${projetoIcone} ${projetoNome}</div>
+                            <h3 class="model-name">${modelo.nome}</h3>
+                            <p class="model-description">${modelo.descricao || 'Sem descrição'}</p>
+                            <div class="model-meta">
+                                <div class="model-meta-item">
+                                    <span class="icon">💾</span>
+                                    ${modelo.tamanho || '- MB'}
+                                </div>
+                                <div class="model-meta-item">
+                                    <span class="icon">👤</span>
+                                    ${modelo.autor || 'Anônimo'}
+                                </div>
+                                ${modelo.data ? `
+                                <div class="model-meta-item">
+                                    <span class="icon">📅</span>
+                                    ${modelo.data}
+                                </div>
+                                ` : ''}
+                            </div>
+                            <div class="model-actions">
+                                <a href="${viewerUrl}" class="btn">
+                                    👁️ Visualizar
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
-        // Limpar seleção
-        function clearSelection(logMessage = true) {
-            if (selectedMesh && originalMaterial) {
-                selectedMesh.material = originalMaterial;
-                selectedMesh = null;
-                originalMaterial = null;
-                document.getElementById('selection-panel').classList.remove('active');
-                if (logMessage) {
-                    log('Seleção limpa', 'info');
-                }
-            }
-        }
-
-        // Atualizar contador de elementos ocultos
-        function updateHiddenCounter() {
-            const count = hiddenMeshes.size;
-            document.getElementById('hidden-count').textContent = count;
-            if (count > 0) {
-                document.getElementById('hidden-counter').classList.add('active');
-            } else {
-                document.getElementById('hidden-counter').classList.remove('active');
-            }
-        }
-
-        // Ocultar elemento selecionado
-        function hideSelectedElement() {
-            if (!selectedMesh) return;
-
-            // Restaurar material original antes de ocultar
-            if (originalMaterial) {
-                selectedMesh.material = originalMaterial;
-            }
-
-            selectedMesh.visible = false;
-            hiddenMeshes.add(selectedMesh);
-
-            log(`Elemento oculto: Mesh #${currentModel.children.indexOf(selectedMesh)}`, 'info');
-
-            // Limpar seleção
-            selectedMesh = null;
-            originalMaterial = null;
-            document.getElementById('selection-panel').classList.remove('active');
-
-            updateHiddenCounter();
-        }
-
-        // Isolar elemento selecionado (ocultar todos os outros)
-        function isolateSelectedElement() {
-            if (!selectedMesh || !currentModel) return;
-
-            const meshToIsolate = selectedMesh;
-
-            // Restaurar material original do elemento selecionado
-            if (originalMaterial) {
-                meshToIsolate.material = originalMaterial;
-            }
-
-            // Ocultar todos os outros elementos
-            currentModel.children.forEach(child => {
-                if (child !== meshToIsolate && child.visible) {
-                    child.visible = false;
-                    hiddenMeshes.add(child);
-                }
-            });
-
-            log(`Elemento isolado: Mesh #${currentModel.children.indexOf(meshToIsolate)}`, 'success');
-
-            // Limpar seleção
-            selectedMesh = null;
-            originalMaterial = null;
-            document.getElementById('selection-panel').classList.remove('active');
-
-            updateHiddenCounter();
-
-            // Enquadrar no elemento isolado
-            const box = new THREE.Box3().setFromObject(meshToIsolate);
-            const center = new THREE.Vector3();
-            const size = new THREE.Vector3();
-            box.getCenter(center);
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            camera.position.set(center.x + maxDim * 2, center.y + maxDim, center.z + maxDim * 2);
-            controls.target.copy(center);
-            controls.update();
-        }
-
-        // Mostrar todos os elementos
-        function showAllElements() {
-            if (!currentModel) return;
-
-            hiddenMeshes.forEach(mesh => {
-                mesh.visible = true;
-            });
-
-            const count = hiddenMeshes.size;
-            hiddenMeshes.clear();
-
-            log(`${count} elementos restaurados`, 'success');
-            updateHiddenCounter();
-        }
-
-        // Aplicar transparência ao modelo
-        function setModelTransparency(opacity) {
-            if (!currentModel) return;
-
-            globalOpacity = opacity;
-
-            currentModel.children.forEach(mesh => {
-                if (mesh.material && mesh !== selectedMesh) {
-                    // Guardar opacidade original se ainda não foi guardada
-                    if (!originalOpacities.has(mesh)) {
-                        originalOpacities.set(mesh, mesh.material.opacity);
-                    }
-
-                    const originalOpacity = originalOpacities.get(mesh);
-                    mesh.material.opacity = originalOpacity * opacity;
-                    mesh.material.transparent = opacity < 1 || originalOpacity < 1;
-                    mesh.material.needsUpdate = true;
-                }
-            });
-        }
-
-        // Handler do slider de transparência
-        function handleTransparencyChange(event) {
-            const value = event.target.value;
-            const opacity = value / 100;
-            document.getElementById('transparency-value').textContent = value + '%';
-            setModelTransparency(opacity);
-        }
-
-        // Atualizar limites do modelo para clipping
-        function updateModelBounds() {
-            if (!currentModel) return;
-            const box = new THREE.Box3().setFromObject(currentModel);
-            modelBounds.min.copy(box.min);
-            modelBounds.max.copy(box.max);
-        }
-
-        // Toggle clipping
-        function toggleClipping() {
-            clippingEnabled = !clippingEnabled;
-            const btn = document.getElementById('btn-clip-toggle');
-
-            if (clippingEnabled) {
-                btn.textContent = '✂️ Desativar';
-                btn.classList.add('active');
-                applyClippingToModel();
-                log('Plano de corte ativado', 'success');
-            } else {
-                btn.textContent = '✂️ Ativar';
-                btn.classList.remove('active');
-                removeClippingFromModel();
-                log('Plano de corte desativado', 'info');
-            }
-        }
-
-        // Aplicar clipping ao modelo
-        function applyClippingToModel() {
-            if (!currentModel) return;
-            currentModel.children.forEach(mesh => {
-                if (mesh.material) {
-                    mesh.material.clippingPlanes = [clippingPlane];
-                    mesh.material.clipShadows = true;
-                    mesh.material.needsUpdate = true;
-                }
-            });
-        }
-
-        // Remover clipping do modelo
-        function removeClippingFromModel() {
-            if (!currentModel) return;
-            currentModel.children.forEach(mesh => {
-                if (mesh.material) {
-                    mesh.material.clippingPlanes = [];
-                    mesh.material.needsUpdate = true;
-                }
-            });
-        }
-
-        // Atualizar posição do plano de corte
-        function updateClippingPlane(axis, value) {
-            if (!currentModel) return;
-
-            currentClipAxis = axis;
-            const range = modelBounds.max[axis] - modelBounds.min[axis];
-            const position = modelBounds.min[axis] + (range * value / 100);
-
-            // Definir normal do plano baseado no eixo
-            const normal = new THREE.Vector3();
-            if (axis === 'x') normal.set(clippingFlipped ? 1 : -1, 0, 0);
-            if (axis === 'y') normal.set(0, clippingFlipped ? 1 : -1, 0);
-            if (axis === 'z') normal.set(0, 0, clippingFlipped ? 1 : -1);
-
-            clippingPlane.normal.copy(normal);
-            clippingPlane.constant = clippingFlipped ? -position : position;
-        }
-
-        // Handler para slider X
-        function handleClipX(event) {
-            updateClippingPlane('x', event.target.value);
-            // Reset outros sliders
-            document.getElementById('clip-y').value = 100;
-            document.getElementById('clip-z').value = 100;
-        }
-
-        // Handler para slider Y
-        function handleClipY(event) {
-            updateClippingPlane('y', event.target.value);
-            // Reset outros sliders
-            document.getElementById('clip-x').value = 100;
-            document.getElementById('clip-z').value = 100;
-        }
-
-        // Handler para slider Z
-        function handleClipZ(event) {
-            updateClippingPlane('z', event.target.value);
-            // Reset outros sliders
-            document.getElementById('clip-x').value = 100;
-            document.getElementById('clip-y').value = 100;
-        }
-
-        // Inverter direção do corte
-        function flipClipping() {
-            clippingFlipped = !clippingFlipped;
-
-            // Reaplicar com a direção invertida
-            const currentSlider = document.getElementById('clip-' + currentClipAxis);
-            updateClippingPlane(currentClipAxis, currentSlider.value);
-
-            log(`Direção do corte invertida`, 'info');
-        }
-
-        // Reset clipping
-        function resetClipping() {
-            document.getElementById('clip-x').value = 100;
-            document.getElementById('clip-y').value = 100;
-            document.getElementById('clip-z').value = 100;
-            clippingFlipped = false;
-            currentClipAxis = 'x';
-            updateClippingPlane('x', 100);
-            log('Plano de corte resetado', 'info');
-        }
-
-        // Toggle modo de medição
-        function toggleMeasureMode() {
-            measureMode = !measureMode;
-            const btn = document.getElementById('btn-measure-toggle');
-            const canvas = document.getElementById('canvas');
-
-            if (measureMode) {
-                btn.textContent = '📏 Medindo...';
-                btn.classList.add('active');
-                canvas.classList.add('measuring');
-                clearSelection(false);
-                log('Modo de medição ativado. Clique no primeiro ponto.', 'info');
-            } else {
-                btn.textContent = '📏 Medir';
-                btn.classList.remove('active');
-                canvas.classList.remove('measuring');
-                log('Modo de medição desativado', 'info');
-            }
-        }
-
-        // Adicionar ponto de medição
-        function addMeasurePoint(point) {
-            // Criar esfera para marcar o ponto
-            const sphereGeom = new THREE.SphereGeometry(0.15, 16, 16);
-            const sphere = new THREE.Mesh(sphereGeom, measureSphereMaterial);
-            sphere.position.copy(point);
-            scene.add(sphere);
-            measureSpheres.push(sphere);
-
-            if (!measurePoint1) {
-                measurePoint1 = point.clone();
-                document.getElementById('measure-points').textContent =
-                    `P1: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)}) → Clique no segundo ponto`;
-                log(`Ponto 1: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)})`, 'info');
-            } else {
-                measurePoint2 = point.clone();
-
-                // Calcular distância
-                const distance = measurePoint1.distanceTo(measurePoint2);
-
-                // Criar linha entre os pontos
-                const geometry = new THREE.BufferGeometry().setFromPoints([measurePoint1, measurePoint2]);
-                measureLine = new THREE.Line(geometry, measureMaterial);
-                scene.add(measureLine);
-
-                // Atualizar UI
-                document.getElementById('measure-distance').textContent = distance.toFixed(3);
-                document.getElementById('measure-points').textContent =
-                    `P1: (${measurePoint1.x.toFixed(2)}, ${measurePoint1.y.toFixed(2)}, ${measurePoint1.z.toFixed(2)})\n` +
-                    `P2: (${measurePoint2.x.toFixed(2)}, ${measurePoint2.y.toFixed(2)}, ${measurePoint2.z.toFixed(2)})`;
-
-                log(`Distância: ${distance.toFixed(3)} metros`, 'success');
-
-                // Desativar modo de medição após medir
-                toggleMeasureMode();
-            }
-        }
-
-        // Limpar medição
-        function clearMeasurement() {
-            // Remover linha
-            if (measureLine) {
-                scene.remove(measureLine);
-                measureLine.geometry.dispose();
-                measureLine = null;
-            }
-
-            // Remover esferas
-            measureSpheres.forEach(sphere => {
-                scene.remove(sphere);
-                sphere.geometry.dispose();
-            });
-            measureSpheres = [];
-
-            // Reset pontos
-            measurePoint1 = null;
-            measurePoint2 = null;
-
-            // Reset UI
-            document.getElementById('measure-distance').textContent = '-';
-            document.getElementById('measure-points').textContent = 'Clique em dois pontos para medir';
-
-            log('Medição limpa', 'info');
-        }
-
-        // Handler de clique para medição
-        function handleMeasureClick(event) {
-            if (!measureMode || !currentModel) return;
-
-            const container = document.getElementById('viewer-container');
-            const rect = container.getBoundingClientRect();
-
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(currentModel, true);
-
-            if (intersects.length > 0) {
-                addMeasurePoint(intersects[0].point);
-            }
-        }
-
-        // Função genérica para animar câmera para uma vista
-        function animateToView(targetPosition, targetLookAt, viewName) {
-            if (!currentModel) return;
-
-            const box = new THREE.Box3().setFromObject(currentModel);
-            const center = new THREE.Vector3();
-            const size = new THREE.Vector3();
-            box.getCenter(center);
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const distance = maxDim * 1.8;
-
-            // Calcular posição final
-            const endPosition = new THREE.Vector3();
-            endPosition.copy(center).add(targetPosition.clone().multiplyScalar(distance));
-
-            // Animar transição
-            const startPosition = camera.position.clone();
-            const startTarget = controls.target.clone();
-            const duration = 500;
-            const startTime = Date.now();
-
-            function animateView() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-
-                camera.position.lerpVectors(startPosition, endPosition, eased);
-                controls.target.lerpVectors(startTarget, center, eased);
-                controls.update();
-
-                if (progress < 1) {
-                    requestAnimationFrame(animateView);
-                } else {
-                    log(`Vista: ${viewName}`, 'success');
-                }
-            }
-            animateView();
-        }
-
-        // Vistas predefinidas
-        function setViewFront() {
-            animateToView(new THREE.Vector3(0, 0, 1), null, 'Frontal');
-        }
-
-        function setViewBack() {
-            animateToView(new THREE.Vector3(0, 0, -1), null, 'Traseira');
-        }
-
-        function setViewLeft() {
-            animateToView(new THREE.Vector3(-1, 0, 0), null, 'Esquerda');
-        }
-
-        function setViewRight() {
-            animateToView(new THREE.Vector3(1, 0, 0), null, 'Direita');
-        }
-
-        function setViewTop() {
-            animateToView(new THREE.Vector3(0, 1, 0.001), null, 'Topo'); // 0.001 para evitar gimbal lock
-        }
-
-        function setViewBottom() {
-            animateToView(new THREE.Vector3(0, -1, 0.001), null, 'Inferior');
-        }
-
-        function setViewIsometric() {
-            animateToView(new THREE.Vector3(1, 1, 1).normalize(), null, 'Isométrica');
+        // Mostrar estado vazio
+        function showEmptyState() {
+            document.getElementById('models-grid').innerHTML = '';
+            document.getElementById('empty-state').style.display = 'block';
+            document.getElementById('count').textContent = '0';
         }
 
         // Event listeners
-        document.getElementById('file-input').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                log(`Selecionado: ${file.name}`, 'info');
-                loadIFC(file);
-            }
-        });
-        document.getElementById('btn-fit').addEventListener('click', fitModel);
-        document.getElementById('btn-center-orbit').addEventListener('click', centerOrbitOnModel);
-        document.getElementById('btn-grid').addEventListener('click', toggleGrid);
-
-        // Duplo clique para centralizar órbita
-        document.getElementById('canvas').addEventListener('dblclick', setOrbitCenter);
-
-        // Clique simples para selecionar elemento
-        document.getElementById('canvas').addEventListener('click', selectElement);
-
-        // Botão limpar seleção
-        document.getElementById('btn-clear-selection').addEventListener('click', () => clearSelection(true));
-
-        // Botões de visibilidade
-        document.getElementById('btn-hide-element').addEventListener('click', hideSelectedElement);
-        document.getElementById('btn-isolate-element').addEventListener('click', isolateSelectedElement);
-        document.getElementById('btn-show-all').addEventListener('click', showAllElements);
-
-        // Slider de transparência
-        document.getElementById('transparency-slider').addEventListener('input', handleTransparencyChange);
-
-        // Controles de clipping
-        document.getElementById('btn-clip-toggle').addEventListener('click', toggleClipping);
-        document.getElementById('btn-clip-flip').addEventListener('click', flipClipping);
-        document.getElementById('btn-clip-reset').addEventListener('click', resetClipping);
-        document.getElementById('clip-x').addEventListener('input', handleClipX);
-        document.getElementById('clip-y').addEventListener('input', handleClipY);
-        document.getElementById('clip-z').addEventListener('input', handleClipZ);
-
-        // Controles de medição
-        document.getElementById('btn-measure-toggle').addEventListener('click', toggleMeasureMode);
-        document.getElementById('btn-measure-clear').addEventListener('click', clearMeasurement);
-
-        // Controles de vistas
-        document.getElementById('btn-view-front').addEventListener('click', setViewFront);
-        document.getElementById('btn-view-back').addEventListener('click', setViewBack);
-        document.getElementById('btn-view-left').addEventListener('click', setViewLeft);
-        document.getElementById('btn-view-right').addEventListener('click', setViewRight);
-        document.getElementById('btn-view-top').addEventListener('click', setViewTop);
-        document.getElementById('btn-view-bottom').addEventListener('click', setViewBottom);
-        document.getElementById('btn-view-iso').addEventListener('click', setViewIsometric);
+        document.getElementById('projeto-filter').addEventListener('change', filterModels);
+        document.getElementById('search-input').addEventListener('input', filterModels);
 
         // Iniciar
-        async function main() {
-            log('Iniciando...', 'info');
-            try {
-                initThreeJS();
-                await initWebIFC();
-                log('VISUALIZADOR PRONTO!', 'success');
-            } catch (err) {
-                log(`Falha na inicialização: ${err.message}`, 'error');
-            }
-        }
-
-        main();
+        loadCatalogo();
     </script>
 </body>
 </html>
