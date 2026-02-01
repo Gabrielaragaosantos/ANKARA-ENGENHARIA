@@ -3,425 +3,638 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador IFC - UNILA</title>
+    <title>Galeria de Modelos IFC - Consórcio MPD/Ankara</title>
     <style>
+        /* ====== TEMA CONSÓRCIO MPD/ANKARA ====== */
+        :root {
+            --cor-primaria: #E65100;
+            --cor-secundaria: #8B4513;
+            --cor-accent: #FFB300;
+            --cor-dark: #1a1a1a;
+            --cor-card: #2d2d2d;
+            --cor-card-hover: #3d3d3d;
+            --cor-text: #ffffff;
+            --cor-text-muted: #b0b0b0;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a2e;
-            color: #fff;
-            overflow: hidden;
+            background: var(--cor-dark);
+            color: var(--cor-text);
+            min-height: 100vh;
         }
-        #app { display: flex; height: 100vh; }
-        #sidebar {
-            width: 300px;
-            background: #16213e;
-            padding: 20px;
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--cor-card) 0%, #1a1a1a 100%);
+            padding: 30px 20px;
+            border-bottom: 3px solid var(--cor-primaria);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-logos {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .logo-consorcio { height: 70px; width: auto; }
+        .logo-unila { height: 60px; width: auto; }
+
+        .header-title {
+            text-align: center;
+            flex: 1;
+        }
+
+        .header-title h1 {
+            font-size: 2em;
+            color: var(--cor-primaria);
+            margin-bottom: 5px;
+        }
+
+        .header-title p {
+            color: var(--cor-accent);
+            font-size: 1.1em;
+        }
+
+        .header-actions {
+            display: flex;
             gap: 15px;
-            overflow-y: auto;
         }
-        #sidebar h1 {
-            font-size: 1.4em;
-            color: #4CAF50;
-            border-bottom: 2px solid #4CAF50;
-            padding-bottom: 10px;
-        }
+
+        /* Botões */
         .btn {
-            background: #4CAF50;
+            background: var(--cor-primaria);
             color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
+            padding: 12px 24px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            transition: background 0.3s;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        .btn:hover { background: #45a049; }
-        .btn:disabled { background: #555; cursor: not-allowed; }
-        .btn-secondary { background: #2196F3; }
-        .btn-secondary:hover { background: #1976D2; }
-        #file-input { display: none; }
-        #viewer-container { flex: 1; position: relative; }
-        #canvas { width: 100%; height: 100%; display: block; }
-        #loading {
+
+        .btn:hover {
+            background: #BF360C;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(230, 81, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--cor-secundaria);
+        }
+
+        .btn-secondary:hover {
+            background: #6D3410;
+        }
+
+        /* Main content */
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        /* Filtros */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-group label {
+            color: var(--cor-text-muted);
+            font-size: 14px;
+        }
+
+        .filter-select {
+            background: var(--cor-card);
+            color: var(--cor-text);
+            border: 1px solid #444;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--cor-primaria);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: var(--cor-card);
+            color: var(--cor-text);
+            border: 1px solid #444;
+            padding: 10px 15px 10px 40px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--cor-primaria);
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box::before {
+            content: '🔍';
             position: absolute;
+            left: 12px;
             top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 30px 50px;
-            border-radius: 10px;
-            text-align: center;
-            display: none;
-            z-index: 100;
+            transform: translateY(-50%);
+            font-size: 16px;
         }
-        #loading.active { display: block; }
+
+        /* Contador de resultados */
+        .results-count {
+            color: var(--cor-text-muted);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .results-count span {
+            color: var(--cor-accent);
+            font-weight: bold;
+        }
+
+        /* Grid de modelos */
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 25px;
+        }
+
+        /* Card de modelo */
+        .model-card {
+            background: var(--cor-card);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+
+        .model-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--cor-primaria);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .model-thumbnail {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #3d3d3d 0%, #2d2d2d 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--cor-text-muted);
+            font-size: 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .model-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .model-thumbnail .placeholder {
+            font-size: 60px;
+        }
+
+        .model-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--cor-primaria);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .model-content {
+            padding: 20px;
+        }
+
+        .model-project {
+            color: var(--cor-accent);
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--cor-text);
+            margin-bottom: 8px;
+        }
+
+        .model-description {
+            color: var(--cor-text-muted);
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            min-height: 40px;
+        }
+
+        .model-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .model-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--cor-text-muted);
+            font-size: 12px;
+        }
+
+        .model-meta-item .icon {
+            font-size: 14px;
+        }
+
+        .model-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .model-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 10px 15px;
+            font-size: 13px;
+        }
+
+        /* Estado vazio */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--cor-text-muted);
+        }
+
+        .empty-state .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            color: var(--cor-text);
+        }
+
+        .empty-state p {
+            font-size: 14px;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--cor-card);
+            padding: 30px 20px;
+            text-align: center;
+            border-top: 1px solid #333;
+            margin-top: 50px;
+        }
+
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .footer-info {
+            margin-bottom: 15px;
+        }
+
+        .footer-info .dev-name {
+            color: var(--cor-secundaria);
+            font-weight: bold;
+        }
+
+        .footer-info .dev-email {
+            color: var(--cor-primaria);
+        }
+
+        .footer-info .dev-role {
+            color: var(--cor-text-muted);
+            font-style: italic;
+        }
+
+        .footer-text {
+            color: var(--cor-text-muted);
+            font-size: 12px;
+        }
+
+        /* Responsivo */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .header-logos {
+                justify-content: center;
+            }
+
+            .header-actions {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group, .search-box {
+                width: 100%;
+            }
+
+            .filter-select {
+                width: 100%;
+            }
+
+            .models-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
         .spinner {
             width: 50px;
             height: 50px;
             border: 4px solid #333;
-            border-top: 4px solid #4CAF50;
+            border-top: 4px solid var(--cor-primaria);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
         }
+
         @keyframes spin { to { transform: rotate(360deg); } }
-        #info-panel {
-            background: #0f3460;
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
-        }
-        #info-panel.active { display: block; }
-        #info-panel h3 { color: #4CAF50; margin-bottom: 10px; }
-        #info-panel p { margin: 5px 0; font-size: 13px; }
-        #debug {
-            background: #0a0a15;
-            padding: 10px;
-            border-radius: 8px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 11px;
-        }
-        .log-success { color: #4CAF50; }
-        .log-error { color: #f44336; }
-        .log-warning { color: #FF9800; }
-        .log-info { color: #2196F3; }
-
-        /* Responsivo para mobile */
-        @media (max-width: 768px) {
-            #app { flex-direction: column; }
-            #sidebar {
-                width: 100%;
-                height: auto;
-                max-height: 40vh;
-                order: 2;
-            }
-            #viewer-container { order: 1; height: 60vh; }
-        }
-
-        /* Footer com creditos */
-        .credits {
-            margin-top: auto;
-            padding-top: 15px;
-            border-top: 1px solid #333;
-            font-size: 11px;
-            color: #888;
-            text-align: center;
-        }
-        .credits a { color: #4CAF50; text-decoration: none; }
-        .credits a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div id="sidebar">
-            <h1>🏗️ Visualizador IFC UNILA</h1>
-            <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
-            <input type="file" id="file-input" accept=".ifc">
-            <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
-            <button id="btn-grid" class="btn btn-secondary">📐 Toggle Grid</button>
-            <div id="info-panel">
-                <h3>Informações do Modelo</h3>
-                <p id="info-name">-</p>
-                <p id="info-elements">-</p>
-                <p id="info-size">-</p>
-            </div>
-            <div id="debug">
-                <div class="log-info">[Sistema] Aguardando inicialização...</div>
-            </div>
-            <div class="credits">
-                Desenvolvido por <a href="https://github.com/seu-usuario" target="_blank">Gabriel - UNILA</a><br>
-                Powered by Three.js + web-ifc
-            </div>
-        </div>
-        <div id="viewer-container">
-            <canvas id="canvas"></canvas>
-            <div id="loading">
-                <div class="spinner"></div>
-                <p id="loading-text">Carregando...</p>
-            </div>
-        </div>
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
     </div>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/"
-        }
-    }
-    </script>
+    <header>
+        <div class="header-content">
+            <div class="header-logos">
+                <img src="logo-consorcio.png" alt="Consórcio MPD/Ankara" class="logo-consorcio" onerror="this.style.display='none'">
+                <img src="logo-unila.png" alt="UNILA" class="logo-unila" onerror="this.style.display='none'">
+            </div>
+            <div class="header-title">
+                <h1>🏗️ Galeria de Modelos IFC</h1>
+                <p>Consórcio MPD/Ankara</p>
+            </div>
+            <div class="header-actions">
+                <a href="visualizador-unila.html" class="btn btn-secondary">
+                    📂 Visualizador com Upload
+                </a>
+            </div>
+        </div>
+    </header>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    <main>
+        <div class="filters">
+            <div class="filter-group">
+                <label for="projeto-filter">Projeto:</label>
+                <select id="projeto-filter" class="filter-select">
+                    <option value="todos">🏢 Todos os Projetos</option>
+                </select>
+            </div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Buscar modelo...">
+            </div>
+        </div>
 
+        <p class="results-count">Mostrando <span id="count">0</span> modelos</p>
+
+        <div class="models-grid" id="models-grid">
+            <!-- Os cards serão inseridos aqui dinamicamente -->
+        </div>
+
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <div class="icon">📭</div>
+            <h3>Nenhum modelo encontrado</h3>
+            <p>Tente ajustar os filtros ou adicione novos modelos ao catálogo.</p>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-info">
+                <span class="dev-name">Gabriel Aragão Santos</span><br>
+                <a href="mailto:gabriel.santos@ankaraengenharia.com.br" class="dev-email">gabriel.santos@ankaraengenharia.com.br</a><br>
+                <span class="dev-role">Arquiteto</span>
+            </div>
+            <p class="footer-text">
+                Galeria de Modelos IFC | Powered by Three.js + web-ifc
+            </p>
+        </div>
+    </footer>
+
+    <script>
         // Variáveis globais
-        let scene, camera, renderer, controls, gridHelper;
-        let ifcAPI = null;
-        let currentModel = null;
+        let catalogo = { projetos: [], modelos: [] };
+        let filteredModels = [];
 
-        // Logger
-        function log(msg, type = 'info') {
-            const debug = document.getElementById('debug');
-            const div = document.createElement('div');
-            div.className = `log-${type}`;
-            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debug.appendChild(div);
-            debug.scrollTop = debug.scrollHeight;
-            console.log(`[${type.toUpperCase()}] ${msg}`);
+        // Carregar catálogo
+        async function loadCatalogo() {
+            try {
+                const response = await fetch('modelos/catalogo.json');
+                if (!response.ok) throw new Error('Catálogo não encontrado');
+                catalogo = await response.json();
+
+                // Popular dropdown de projetos
+                populateProjectFilter();
+
+                // Mostrar todos os modelos
+                filterModels();
+
+            } catch (error) {
+                console.error('Erro ao carregar catálogo:', error);
+                showEmptyState();
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
         }
 
-        function showLoading(text) {
-            document.getElementById('loading').classList.add('active');
-            document.getElementById('loading-text').textContent = text;
+        // Popular dropdown de projetos
+        function populateProjectFilter() {
+            const select = document.getElementById('projeto-filter');
+            select.innerHTML = '<option value="todos">🏢 Todos os Projetos</option>';
+
+            catalogo.projetos.forEach(projeto => {
+                if (projeto.id !== 'todos') {
+                    const option = document.createElement('option');
+                    option.value = projeto.id;
+                    option.textContent = `${projeto.icone || '📁'} ${projeto.nome}`;
+                    select.appendChild(option);
+                }
+            });
         }
 
-        function hideLoading() {
-            document.getElementById('loading').classList.remove('active');
-        }
+        // Filtrar modelos
+        function filterModels() {
+            const projetoId = document.getElementById('projeto-filter').value;
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
 
-        // Inicializar Three.js
-        function initThreeJS() {
-            log('Inicializando Three.js...', 'info');
-            const container = document.getElementById('viewer-container');
-            const canvas = document.getElementById('canvas');
+            filteredModels = catalogo.modelos.filter(modelo => {
+                // Filtrar por projeto
+                const matchProjeto = projetoId === 'todos' || modelo.projeto === projetoId;
 
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a2e);
+                // Filtrar por busca
+                const matchSearch = !searchTerm ||
+                    modelo.nome.toLowerCase().includes(searchTerm) ||
+                    modelo.descricao.toLowerCase().includes(searchTerm);
 
-            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
-            camera.position.set(50, 50, 50);
+                // Só mostrar modelos com URL válida
+                const hasUrl = modelo.url && modelo.url.length > 0;
 
-            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-            renderer.setSize(container.clientWidth, container.clientHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-
-            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-            const dir1 = new THREE.DirectionalLight(0xffffff, 0.8);
-            dir1.position.set(50, 100, 50);
-            scene.add(dir1);
-            const dir2 = new THREE.DirectionalLight(0xffffff, 0.4);
-            dir2.position.set(-50, 50, -50);
-            scene.add(dir2);
-
-            gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
-            scene.add(gridHelper);
-            scene.add(new THREE.AxesHelper(10));
-
-            window.addEventListener('resize', () => {
-                camera.aspect = container.clientWidth / container.clientHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(container.clientWidth, container.clientHeight);
+                return matchProjeto && matchSearch && hasUrl;
             });
 
-            function animate() {
-                requestAnimationFrame(animate);
-                controls.update();
-                renderer.render(scene, camera);
-            }
-            animate();
-
-            log('Three.js inicializado!', 'success');
+            renderModels();
         }
 
-        // Inicializar web-ifc via ES Module
-        async function initWebIFC() {
-            log('Carregando web-ifc...', 'info');
-            showLoading('Carregando motor IFC...');
+        // Renderizar modelos
+        function renderModels() {
+            const grid = document.getElementById('models-grid');
+            const emptyState = document.getElementById('empty-state');
+            const count = document.getElementById('count');
 
-            try {
-                // Importar web-ifc como ES Module
-                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                log('Módulo web-ifc importado', 'success');
+            count.textContent = filteredModels.length;
 
-                ifcAPI = new WebIFC.IfcAPI();
-                ifcAPI.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/');
-
-                log('Inicializando WASM...', 'info');
-                await ifcAPI.Init();
-
-                log('web-ifc pronto!', 'success');
-                hideLoading();
-            } catch (err) {
-                log(`Erro ao carregar web-ifc: ${err.message}`, 'error');
-                console.error(err);
-                hideLoading();
-                throw err;
-            }
-        }
-
-        // Carregar IFC
-        async function loadIFC(file) {
-            if (!ifcAPI) {
-                alert('Motor IFC não inicializado. Recarregue a página.');
+            if (filteredModels.length === 0) {
+                grid.innerHTML = '';
+                emptyState.style.display = 'block';
                 return;
             }
 
-            try {
-                log(`Carregando: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
-                showLoading('Lendo arquivo...');
+            emptyState.style.display = 'none';
 
-                // Limpar modelo anterior
-                if (currentModel) {
-                    scene.remove(currentModel);
-                    currentModel.traverse((child) => {
-                        if (child.geometry) child.geometry.dispose();
-                        if (child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(m => m.dispose());
-                            } else {
-                                child.material.dispose();
-                            }
-                        }
-                    });
-                    currentModel = null;
-                }
+            grid.innerHTML = filteredModels.map(modelo => {
+                const projeto = catalogo.projetos.find(p => p.id === modelo.projeto);
+                const projetoNome = projeto ? projeto.nome : 'Outro';
+                const projetoIcone = projeto ? projeto.icone : '📁';
 
-                const data = new Uint8Array(await file.arrayBuffer());
-                log(`Arquivo lido: ${data.length} bytes`, 'info');
+                const thumbnailHtml = modelo.thumbnail && modelo.thumbnail !== 'modelos/thumbnails/placeholder.png'
+                    ? `<img src="${modelo.thumbnail}" alt="${modelo.nome}" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>🏗️</div>'">`
+                    : '<div class="placeholder">🏗️</div>';
 
-                showLoading('Processando IFC...');
+                const viewerUrl = `viewer.html?modelo=${encodeURIComponent(modelo.url)}&nome=${encodeURIComponent(modelo.nome)}`;
 
-                const modelID = ifcAPI.OpenModel(data);
-                log(`Modelo aberto (ID: ${modelID})`, 'success');
-
-                showLoading('Gerando geometrias...');
-
-                const modelGroup = new THREE.Group();
-                let meshCount = 0;
-
-                ifcAPI.StreamAllMeshes(modelID, (mesh) => {
-                    const geoms = mesh.geometries;
-                    for (let i = 0; i < geoms.size(); i++) {
-                        const pg = geoms.get(i);
-                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
-                        const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
-                        const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
-
-                        if (vData.length === 0) {
-                            geom.delete();
-                            continue;
-                        }
-
-                        const positions = [];
-                        const normals = [];
-                        for (let j = 0; j < vData.length; j += 6) {
-                            positions.push(vData[j], vData[j+1], vData[j+2]);
-                            normals.push(vData[j+3], vData[j+4], vData[j+5]);
-                        }
-
-                        const bufferGeom = new THREE.BufferGeometry();
-                        bufferGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                        bufferGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-                        if (iData.length > 0) {
-                            bufferGeom.setIndex(Array.from(iData));
-                        }
-
-                        const c = pg.color;
-                        const mat = new THREE.MeshPhongMaterial({
-                            color: new THREE.Color(c.x, c.y, c.z),
-                            opacity: c.w,
-                            transparent: c.w < 1,
-                            side: THREE.DoubleSide
-                        });
-
-                        const threeMesh = new THREE.Mesh(bufferGeom, mat);
-                        const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
-                        threeMesh.applyMatrix4(matrix);
-
-                        modelGroup.add(threeMesh);
-                        meshCount++;
-                        geom.delete();
-                    }
-                });
-
-                log(`Gerados ${meshCount} meshes`, 'success');
-
-                scene.add(modelGroup);
-                currentModel = modelGroup;
-
-                const box = new THREE.Box3().setFromObject(modelGroup);
-                const center = new THREE.Vector3();
-                const size = new THREE.Vector3();
-                box.getCenter(center);
-                box.getSize(size);
-
-                const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
-                controls.target.copy(center);
-                controls.update();
-
-                document.getElementById('info-panel').classList.add('active');
-                document.getElementById('info-name').textContent = `Arquivo: ${file.name}`;
-                document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
-                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
-                document.getElementById('btn-fit').disabled = false;
-
-                ifcAPI.CloseModel(modelID);
-                hideLoading();
-                log('Modelo carregado com sucesso!', 'success');
-
-            } catch (error) {
-                log(`ERRO: ${error.message}`, 'error');
-                console.error(error);
-                hideLoading();
-                alert(`Erro ao carregar IFC:\n\n${error.message}`);
-            }
+                return `
+                    <div class="model-card">
+                        <div class="model-thumbnail">
+                            ${thumbnailHtml}
+                            <span class="model-badge">${modelo.formato || 'IFC'}</span>
+                        </div>
+                        <div class="model-content">
+                            <div class="model-project">${projetoIcone} ${projetoNome}</div>
+                            <h3 class="model-name">${modelo.nome}</h3>
+                            <p class="model-description">${modelo.descricao || 'Sem descrição'}</p>
+                            <div class="model-meta">
+                                <div class="model-meta-item">
+                                    <span class="icon">💾</span>
+                                    ${modelo.tamanho || '- MB'}
+                                </div>
+                                <div class="model-meta-item">
+                                    <span class="icon">👤</span>
+                                    ${modelo.autor || 'Anônimo'}
+                                </div>
+                                ${modelo.data ? `
+                                <div class="model-meta-item">
+                                    <span class="icon">📅</span>
+                                    ${modelo.data}
+                                </div>
+                                ` : ''}
+                            </div>
+                            <div class="model-actions">
+                                <a href="${viewerUrl}" class="btn">
+                                    👁️ Visualizar
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
-        function fitModel() {
-            if (!currentModel) return;
-            const box = new THREE.Box3().setFromObject(currentModel);
-            const center = new THREE.Vector3();
-            const size = new THREE.Vector3();
-            box.getCenter(center);
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
-            controls.target.copy(center);
-            controls.update();
-            log('Modelo enquadrado', 'info');
-        }
-
-        let gridVisible = true;
-        function toggleGrid() {
-            gridVisible = !gridVisible;
-            gridHelper.visible = gridVisible;
-            log(`Grid ${gridVisible ? 'visível' : 'oculto'}`, 'info');
+        // Mostrar estado vazio
+        function showEmptyState() {
+            document.getElementById('models-grid').innerHTML = '';
+            document.getElementById('empty-state').style.display = 'block';
+            document.getElementById('count').textContent = '0';
         }
 
         // Event listeners
-        document.getElementById('file-input').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                log(`Selecionado: ${file.name}`, 'info');
-                loadIFC(file);
-            }
-        });
-        document.getElementById('btn-fit').addEventListener('click', fitModel);
-        document.getElementById('btn-grid').addEventListener('click', toggleGrid);
+        document.getElementById('projeto-filter').addEventListener('change', filterModels);
+        document.getElementById('search-input').addEventListener('input', filterModels);
 
         // Iniciar
-        async function main() {
-            log('Iniciando...', 'info');
-            try {
-                initThreeJS();
-                await initWebIFC();
-                log('VISUALIZADOR PRONTO!', 'success');
-            } catch (err) {
-                log(`Falha na inicialização: ${err.message}`, 'error');
-            }
-        }
-
-        main();
+        loadCatalogo();
     </script>
 </body>
 </html>

@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador IFC - Galeria MPD/Ankara</title>
+    <style>
+        /* ====== TEMA CONSÓRCIO MPD/ANKARA ====== */
+        :root {
+            --cor-primaria: #E65100;
+            --cor-secundaria: #8B4513;
+            --cor-accent: #FFB300;
+            --cor-dark: #1a1a1a;
+            --cor-sidebar: #2d2d2d;
+            --cor-panel: #3d3d3d;
+            --cor-text: #ffffff;
+            --cor-text-muted: #b0b0b0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--cor-dark);
+            color: var(--cor-text);
+            overflow: hidden;
+        }
+        #app { display: flex; height: 100vh; }
+        #sidebar {
+            width: 320px;
+            background: var(--cor-sidebar);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        /* Header com logos */
+        .header-logos {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--cor-primaria);
+            margin-bottom: 5px;
+        }
+        .logo-consorcio { height: 60px; width: auto; }
+        .logo-unila { height: 50px; width: auto; }
+
+        #sidebar h1 {
+            font-size: 1.3em;
+            color: var(--cor-primaria);
+            padding-bottom: 5px;
+            text-align: center;
+        }
+        #sidebar .subtitle {
+            font-size: 0.95em;
+            color: var(--cor-accent);
+            text-align: center;
+            margin-top: -5px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--cor-secundaria);
+        }
+        #model-name {
+            font-size: 0.85em;
+            color: var(--cor-text-muted);
+            text-align: center;
+            padding: 8px;
+            background: var(--cor-panel);
+            border-radius: 6px;
+            word-break: break-all;
+        }
+        .btn {
+            background: var(--cor-primaria);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+            text-decoration: none;
+            text-align: center;
+            display: block;
+        }
+        .btn:hover { background: #BF360C; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        .btn-secondary { background: var(--cor-secundaria); }
+        .btn-secondary:hover { background: #6D3410; }
+        .btn-back { background: #546E7A; }
+        .btn-back:hover { background: #37474F; }
+        #viewer-container { flex: 1; position: relative; }
+        #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+        #canvas:active { cursor: grabbing; }
+
+        /* Indicador de ponto de órbita */
+        #orbit-indicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--cor-primaria);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 50;
+            animation: pulse 0.5s ease-out;
+        }
+        #orbit-indicator::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background: var(--cor-primaria);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px 60px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+            min-width: 300px;
+        }
+        #loading.active { display: block; }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid var(--cor-primaria);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Barra de progresso */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: var(--cor-primaria);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 12px;
+            color: var(--cor-text-muted);
+            margin-top: 8px;
+        }
+
+        #info-panel {
+            background: var(--cor-panel);
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-primaria);
+        }
+        #info-panel.active { display: block; }
+        #info-panel h3 { color: var(--cor-primaria); margin-bottom: 10px; }
+        #info-panel p { margin: 5px 0; font-size: 13px; }
+
+        /* Painel de seleção */
+        #selection-panel {
+            background: var(--cor-panel);
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-accent);
+        }
+        #selection-panel.active { display: block; }
+        #selection-panel h3 { color: var(--cor-accent); margin-bottom: 10px; font-size: 14px; }
+        #selection-panel p { margin: 4px 0; font-size: 12px; }
+        #selection-panel .label { color: var(--cor-text-muted); }
+        #selection-panel .value { color: var(--cor-text); }
+        #btn-clear-selection {
+            margin-top: 10px;
+            background: #c62828;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+        #btn-clear-selection:hover { background: #b71c1c; }
+
+        .selection-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .selection-actions .btn {
+            flex: 1;
+            min-width: 80px;
+            padding: 8px 10px;
+            font-size: 11px;
+        }
+        .btn-hide { background: var(--cor-secundaria); }
+        .btn-hide:hover { background: #6D3410; }
+        .btn-isolate { background: var(--cor-accent); color: #000; }
+        .btn-isolate:hover { background: #FF8F00; }
+        .btn-show-all { background: #558B2F; }
+        .btn-show-all:hover { background: #33691E; }
+
+        #hidden-counter {
+            background: var(--cor-panel);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            display: none;
+            text-align: center;
+        }
+        #hidden-counter.active { display: block; }
+        #hidden-counter span { color: var(--cor-accent); font-weight: bold; }
+
+        #transparency-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-secundaria);
+        }
+        #transparency-panel.active { display: block; }
+        #transparency-panel h4 {
+            color: var(--cor-secundaria);
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #555;
+            border-radius: 3px;
+            outline: none;
+        }
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--cor-primaria);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .slider-value {
+            min-width: 45px;
+            text-align: right;
+            font-size: 12px;
+            color: var(--cor-primaria);
+            font-weight: bold;
+        }
+
+        #clipping-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-primaria);
+        }
+        #clipping-panel.active { display: block; }
+        #clipping-panel h4 {
+            color: var(--cor-primaria);
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .clipping-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .clipping-axis {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .clipping-axis label {
+            min-width: 20px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .clipping-axis input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #555;
+            border-radius: 3px;
+        }
+        .clipping-axis input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: var(--cor-primaria);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .axis-x { color: #f44336; }
+        .axis-y { color: #558B2F; }
+        .axis-z { color: #1565C0; }
+        .clipping-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 5px;
+        }
+        .clipping-buttons .btn {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 11px;
+        }
+        .btn-clip-toggle { background: var(--cor-primaria); }
+        .btn-clip-toggle:hover { background: #BF360C; }
+        .btn-clip-toggle.active { background: #558B2F; }
+        .btn-clip-reset { background: #546E7A; }
+        .btn-clip-reset:hover { background: #37474F; }
+        .btn-clip-flip { background: var(--cor-secundaria); }
+        .btn-clip-flip:hover { background: #6D3410; }
+
+        #measure-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-accent);
+        }
+        #measure-panel.active { display: block; }
+        #measure-panel h4 {
+            color: var(--cor-accent);
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .measure-result {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .measure-result .distance {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--cor-accent);
+        }
+        .measure-result .unit {
+            font-size: 14px;
+            color: var(--cor-text-muted);
+        }
+        .measure-points {
+            font-size: 11px;
+            color: var(--cor-text-muted);
+            margin-top: 5px;
+        }
+        .measure-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .measure-buttons .btn {
+            flex: 1;
+            padding: 8px 10px;
+            font-size: 11px;
+        }
+        .btn-measure { background: var(--cor-accent); color: #000; }
+        .btn-measure:hover { background: #FF8F00; }
+        .btn-measure.active { background: #558B2F; color: #fff; }
+        .btn-measure-clear { background: #546E7A; }
+        .btn-measure-clear:hover { background: #37474F; }
+        #canvas.measuring { cursor: crosshair !important; }
+
+        #views-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-secundaria);
+        }
+        #views-panel.active { display: block; }
+        #views-panel h4 {
+            color: var(--cor-secundaria);
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .views-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        .views-grid .btn {
+            padding: 10px 8px;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .views-grid .btn .icon { font-size: 18px; }
+        .btn-view { background: var(--cor-secundaria); }
+        .btn-view:hover { background: #6D3410; }
+
+        #debug {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .log-success { color: #558B2F; }
+        .log-error { color: #c62828; }
+        .log-warning { color: var(--cor-accent); }
+        .log-info { color: var(--cor-primaria); }
+
+        @media (max-width: 768px) {
+            #app { flex-direction: column; }
+            #sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 40vh;
+                order: 2;
+            }
+            #viewer-container { order: 1; height: 60vh; }
+        }
+
+        .credits {
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+            font-size: 11px;
+            color: var(--cor-text-muted);
+            text-align: center;
+        }
+        .credits a { color: var(--cor-primaria); text-decoration: none; }
+        .credits a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="sidebar">
+            <div class="header-logos">
+                <img src="logo-consorcio.png" alt="Consórcio MPD/Ankara" class="logo-consorcio" onerror="this.style.display='none'">
+                <img src="logo-unila.png" alt="UNILA" class="logo-unila" onerror="this.style.display='none'">
+            </div>
+            <h1>🏗️ Visualizador IFC</h1>
+            <p class="subtitle">Galeria de Modelos</p>
+            <p id="model-name">Carregando modelo...</p>
+            <a href="index.html" class="btn btn-back">⬅️ Voltar para Galeria</a>
+            <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
+            <button id="btn-center-orbit" class="btn btn-secondary" disabled>🔄 Centralizar Órbita</button>
+            <button id="btn-grid" class="btn btn-secondary">📐 Toggle Grid</button>
+            <p id="orbit-hint" style="font-size: 11px; color: #888; display: none;">💡 Duplo clique no modelo para definir centro de órbita</p>
+            <div id="info-panel">
+                <h3>Informações do Modelo</h3>
+                <p id="info-name">-</p>
+                <p id="info-elements">-</p>
+                <p id="info-size">-</p>
+            </div>
+            <div id="selection-panel">
+                <h3>🎯 Elemento Selecionado</h3>
+                <p><span class="label">ID:</span> <span class="value" id="sel-id">-</span></p>
+                <p><span class="label">Posição:</span> <span class="value" id="sel-position">-</span></p>
+                <p><span class="label">Dimensões:</span> <span class="value" id="sel-size">-</span></p>
+                <div class="selection-actions">
+                    <button id="btn-hide-element" class="btn btn-hide">👁‍🗨 Ocultar</button>
+                    <button id="btn-isolate-element" class="btn btn-isolate">🎯 Isolar</button>
+                </div>
+                <button id="btn-clear-selection" class="btn">✖ Limpar Seleção</button>
+            </div>
+            <div id="hidden-counter">
+                <span id="hidden-count">0</span> elementos ocultos
+                <button id="btn-show-all" class="btn btn-show-all" style="margin-top: 8px; width: 100%;">👁 Mostrar Todos</button>
+            </div>
+            <div id="transparency-panel">
+                <h4>🔮 Transparência do Modelo</h4>
+                <div class="slider-container">
+                    <input type="range" id="transparency-slider" min="0" max="100" value="100">
+                    <span class="slider-value" id="transparency-value">100%</span>
+                </div>
+            </div>
+            <div id="clipping-panel">
+                <h4>✂️ Plano de Corte</h4>
+                <div class="clipping-controls">
+                    <div class="clipping-axis">
+                        <label class="axis-x">X</label>
+                        <input type="range" id="clip-x" min="0" max="100" value="100">
+                    </div>
+                    <div class="clipping-axis">
+                        <label class="axis-y">Y</label>
+                        <input type="range" id="clip-y" min="0" max="100" value="100">
+                    </div>
+                    <div class="clipping-axis">
+                        <label class="axis-z">Z</label>
+                        <input type="range" id="clip-z" min="0" max="100" value="100">
+                    </div>
+                    <div class="clipping-buttons">
+                        <button id="btn-clip-toggle" class="btn btn-clip-toggle">✂️ Ativar</button>
+                        <button id="btn-clip-flip" class="btn btn-clip-flip">🔄 Inverter</button>
+                        <button id="btn-clip-reset" class="btn btn-clip-reset">↩️ Reset</button>
+                    </div>
+                </div>
+            </div>
+            <div id="measure-panel">
+                <h4>📏 Ferramenta de Medição</h4>
+                <div class="measure-result">
+                    <span class="distance" id="measure-distance">-</span>
+                    <span class="unit">metros</span>
+                    <div class="measure-points" id="measure-points">Clique em dois pontos para medir</div>
+                </div>
+                <div class="measure-buttons">
+                    <button id="btn-measure-toggle" class="btn btn-measure">📏 Medir</button>
+                    <button id="btn-measure-clear" class="btn btn-measure-clear">🗑️ Limpar</button>
+                </div>
+            </div>
+            <div id="views-panel">
+                <h4>👁️ Vistas Predefinidas</h4>
+                <div class="views-grid">
+                    <button id="btn-view-front" class="btn btn-view"><span class="icon">⬆️</span>Frontal</button>
+                    <button id="btn-view-back" class="btn btn-view"><span class="icon">⬇️</span>Traseira</button>
+                    <button id="btn-view-left" class="btn btn-view"><span class="icon">⬅️</span>Esquerda</button>
+                    <button id="btn-view-right" class="btn btn-view"><span class="icon">➡️</span>Direita</button>
+                    <button id="btn-view-top" class="btn btn-view"><span class="icon">🔝</span>Topo</button>
+                    <button id="btn-view-bottom" class="btn btn-view"><span class="icon">🔻</span>Inferior</button>
+                    <button id="btn-view-iso" class="btn btn-view" style="grid-column: span 2;"><span class="icon">📐</span>Isométrica</button>
+                </div>
+            </div>
+            <div id="debug">
+                <div class="log-info">[Sistema] Aguardando inicialização...</div>
+            </div>
+            <div class="credits">
+                Galeria de Modelos IFC<br>
+                Consórcio MPD/Ankara
+            </div>
+        </div>
+        <div id="viewer-container">
+            <canvas id="canvas"></canvas>
+            <div id="orbit-indicator"></div>
+            <div id="loading">
+                <div class="spinner"></div>
+                <p id="loading-text">Carregando...</p>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <p class="progress-text" id="progress-text">0%</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Variáveis globais
+        let scene, camera, renderer, controls, gridHelper;
+        let ifcAPI = null;
+        let currentModel = null;
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let modelName = 'Modelo';
+
+        // Seleção de elementos
+        let selectedMesh = null;
+        let originalMaterial = null;
+        const selectionColor = new THREE.Color(0xFF9800);
+        const selectionMaterial = new THREE.MeshPhongMaterial({
+            color: selectionColor,
+            emissive: selectionColor,
+            emissiveIntensity: 0.3,
+            side: THREE.DoubleSide
+        });
+
+        // Controle de visibilidade
+        let hiddenMeshes = new Set();
+
+        // Controle de transparência
+        let globalOpacity = 1.0;
+        let originalOpacities = new Map();
+
+        // Plano de corte
+        let clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+        let clippingEnabled = false;
+        let clippingFlipped = false;
+        let modelBounds = { min: new THREE.Vector3(), max: new THREE.Vector3() };
+        let currentClipAxis = 'x';
+
+        // Ferramenta de medição
+        let measureMode = false;
+        let measurePoint1 = null;
+        let measurePoint2 = null;
+        let measureLine = null;
+        let measureSpheres = [];
+        const measureMaterial = new THREE.LineBasicMaterial({ color: 0xFFEB3B, linewidth: 2 });
+        const measureSphereMaterial = new THREE.MeshBasicMaterial({ color: 0xFFEB3B });
+
+        // Logger
+        function log(msg, type = 'info') {
+            const debug = document.getElementById('debug');
+            const div = document.createElement('div');
+            div.className = `log-${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debug.appendChild(div);
+            debug.scrollTop = debug.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${msg}`);
+        }
+
+        function showLoading(text, progress = null) {
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('loading-text').textContent = text;
+            if (progress !== null) {
+                document.getElementById('progress-bar').style.width = progress + '%';
+                document.getElementById('progress-text').textContent = Math.round(progress) + '%';
+            }
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+
+        // Obter parâmetros da URL
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                modelo: params.get('modelo'),
+                nome: params.get('nome') || 'Modelo IFC'
+            };
+        }
+
+        // Inicializar Three.js
+        function initThreeJS() {
+            log('Inicializando Three.js...', 'info');
+            const container = document.getElementById('viewer-container');
+            const canvas = document.getElementById('canvas');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
+            camera.position.set(50, 50, 50);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.localClippingEnabled = true;
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dir1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dir1.position.set(50, 100, 50);
+            scene.add(dir1);
+            const dir2 = new THREE.DirectionalLight(0xffffff, 0.4);
+            dir2.position.set(-50, 50, -50);
+            scene.add(dir2);
+
+            gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
+            scene.add(gridHelper);
+            scene.add(new THREE.AxesHelper(10));
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            log('Three.js inicializado!', 'success');
+        }
+
+        // Inicializar web-ifc via ES Module
+        async function initWebIFC() {
+            log('Carregando web-ifc...', 'info');
+            showLoading('Carregando motor IFC...', 10);
+
+            try {
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                log('Módulo web-ifc importado', 'success');
+
+                ifcAPI = new WebIFC.IfcAPI();
+                ifcAPI.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/');
+
+                log('Inicializando WASM...', 'info');
+                showLoading('Inicializando WASM...', 20);
+                await ifcAPI.Init();
+
+                log('web-ifc pronto!', 'success');
+            } catch (err) {
+                log(`Erro ao carregar web-ifc: ${err.message}`, 'error');
+                console.error(err);
+                hideLoading();
+                throw err;
+            }
+        }
+
+        // Proxy Cloudflare para evitar CORS
+        const CORS_PROXY = 'https://ifc-proxy.gabrielsoudier.workers.dev/?url=';
+
+        // Carregar IFC de URL
+        async function loadIFCFromURL(url, name) {
+            if (!ifcAPI) {
+                alert('Motor IFC não inicializado. Recarregue a página.');
+                return;
+            }
+
+            try {
+                modelName = name;
+                document.getElementById('model-name').textContent = name;
+                document.title = `${name} - Visualizador IFC`;
+
+                log(`Baixando: ${name}`, 'info');
+                showLoading('Baixando modelo...', 30);
+
+                // Usar proxy para URLs do GitHub (evitar CORS)
+                let fetchUrl = url;
+                if (url.includes('github.com') || url.includes('githubusercontent.com')) {
+                    fetchUrl = CORS_PROXY + encodeURIComponent(url);
+                    log('Usando proxy CORS...', 'info');
+                }
+
+                // Baixar o arquivo IFC
+                const response = await fetch(fetchUrl);
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
+                }
+
+                const contentLength = response.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength, 10) : 0;
+                let loaded = 0;
+
+                const reader = response.body.getReader();
+                const chunks = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+                    if (total > 0) {
+                        const progress = 30 + (loaded / total) * 40;
+                        showLoading(`Baixando... (${(loaded / 1024 / 1024).toFixed(1)} MB)`, progress);
+                    }
+                }
+
+                const data = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+                let offset = 0;
+                for (const chunk of chunks) {
+                    data.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                log(`Arquivo baixado: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'success');
+                showLoading('Processando IFC...', 75);
+
+                const modelID = ifcAPI.OpenModel(data);
+                log(`Modelo aberto (ID: ${modelID})`, 'success');
+
+                showLoading('Gerando geometrias...', 85);
+
+                const modelGroup = new THREE.Group();
+                let meshCount = 0;
+
+                ifcAPI.StreamAllMeshes(modelID, (mesh) => {
+                    const geoms = mesh.geometries;
+                    for (let i = 0; i < geoms.size(); i++) {
+                        const pg = geoms.get(i);
+                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
+                        const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                        const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+
+                        if (vData.length === 0) {
+                            geom.delete();
+                            continue;
+                        }
+
+                        const positions = [];
+                        const normals = [];
+                        for (let j = 0; j < vData.length; j += 6) {
+                            positions.push(vData[j], vData[j+1], vData[j+2]);
+                            normals.push(vData[j+3], vData[j+4], vData[j+5]);
+                        }
+
+                        const bufferGeom = new THREE.BufferGeometry();
+                        bufferGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                        bufferGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                        if (iData.length > 0) {
+                            bufferGeom.setIndex(Array.from(iData));
+                        }
+
+                        const c = pg.color;
+                        const mat = new THREE.MeshPhongMaterial({
+                            color: new THREE.Color(c.x, c.y, c.z),
+                            opacity: c.w,
+                            transparent: c.w < 1,
+                            side: THREE.DoubleSide
+                        });
+
+                        const threeMesh = new THREE.Mesh(bufferGeom, mat);
+                        const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
+                        threeMesh.applyMatrix4(matrix);
+
+                        modelGroup.add(threeMesh);
+                        meshCount++;
+                        geom.delete();
+                    }
+                });
+
+                log(`Gerados ${meshCount} meshes`, 'success');
+                showLoading('Finalizando...', 95);
+
+                scene.add(modelGroup);
+                currentModel = modelGroup;
+
+                const box = new THREE.Box3().setFromObject(modelGroup);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
+                controls.target.copy(center);
+                controls.update();
+
+                document.getElementById('info-panel').classList.add('active');
+                document.getElementById('info-name').textContent = `Modelo: ${name}`;
+                document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
+                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
+                document.getElementById('btn-fit').disabled = false;
+                document.getElementById('btn-center-orbit').disabled = false;
+                document.getElementById('orbit-hint').style.display = 'block';
+                document.getElementById('transparency-panel').classList.add('active');
+                document.getElementById('clipping-panel').classList.add('active');
+                document.getElementById('measure-panel').classList.add('active');
+                document.getElementById('views-panel').classList.add('active');
+                updateModelBounds();
+
+                ifcAPI.CloseModel(modelID);
+                hideLoading();
+                log('Modelo carregado com sucesso!', 'success');
+
+            } catch (error) {
+                log(`ERRO: ${error.message}`, 'error');
+                console.error(error);
+                hideLoading();
+                document.getElementById('model-name').textContent = 'Erro ao carregar modelo';
+                alert(`Erro ao carregar IFC:\n\n${error.message}\n\nVerifique se a URL do modelo está correta.`);
+            }
+        }
+
+        function fitModel() {
+            if (!currentModel) return;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
+            controls.target.copy(center);
+            controls.update();
+            log('Modelo enquadrado', 'info');
+        }
+
+        let gridVisible = true;
+        function toggleGrid() {
+            gridVisible = !gridVisible;
+            gridHelper.visible = gridVisible;
+            log(`Grid ${gridVisible ? 'visível' : 'oculto'}`, 'info');
+        }
+
+        function setOrbitCenter(event) {
+            if (!currentModel) return;
+
+            const container = document.getElementById('viewer-container');
+            const rect = container.getBoundingClientRect();
+
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentModel, true);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+
+                const startTarget = controls.target.clone();
+                const endTarget = point.clone();
+                const duration = 300;
+                const startTime = Date.now();
+
+                function animateOrbit() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+
+                    controls.target.lerpVectors(startTarget, endTarget, eased);
+                    controls.update();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animateOrbit);
+                    }
+                }
+                animateOrbit();
+
+                const indicator = document.getElementById('orbit-indicator');
+                indicator.style.left = event.clientX - rect.left + 'px';
+                indicator.style.top = event.clientY - rect.top + 'px';
+                indicator.style.display = 'block';
+                setTimeout(() => { indicator.style.display = 'none'; }, 500);
+
+                log(`Órbita centralizada em (${point.x.toFixed(1)}, ${point.y.toFixed(1)}, ${point.z.toFixed(1)})`, 'success');
+            }
+        }
+
+        function centerOrbitOnModel() {
+            if (!currentModel) return;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+
+            const startTarget = controls.target.clone();
+            const duration = 300;
+            const startTime = Date.now();
+
+            function animateOrbit() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+
+                controls.target.lerpVectors(startTarget, center, eased);
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateOrbit);
+                }
+            }
+            animateOrbit();
+            log('Órbita centralizada no modelo', 'success');
+        }
+
+        function selectElement(event) {
+            if (measureMode) {
+                handleMeasureClick(event);
+                return;
+            }
+
+            if (!currentModel) return;
+
+            const container = document.getElementById('viewer-container');
+            const rect = container.getBoundingClientRect();
+
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentModel, true);
+
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object;
+
+                if (mesh === selectedMesh) return;
+
+                clearSelection(false);
+
+                selectedMesh = mesh;
+                originalMaterial = mesh.material;
+
+                mesh.material = selectionMaterial;
+
+                const box = new THREE.Box3().setFromObject(mesh);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+
+                document.getElementById('selection-panel').classList.add('active');
+                document.getElementById('sel-id').textContent = `Mesh #${currentModel.children.indexOf(mesh)}`;
+                document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
+                document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
+
+                log(`Elemento selecionado: Mesh #${currentModel.children.indexOf(mesh)}`, 'success');
+            } else {
+                clearSelection(true);
+            }
+        }
+
+        function clearSelection(logMessage = true) {
+            if (selectedMesh && originalMaterial) {
+                selectedMesh.material = originalMaterial;
+                selectedMesh = null;
+                originalMaterial = null;
+                document.getElementById('selection-panel').classList.remove('active');
+                if (logMessage) {
+                    log('Seleção limpa', 'info');
+                }
+            }
+        }
+
+        function updateHiddenCounter() {
+            const count = hiddenMeshes.size;
+            document.getElementById('hidden-count').textContent = count;
+            if (count > 0) {
+                document.getElementById('hidden-counter').classList.add('active');
+            } else {
+                document.getElementById('hidden-counter').classList.remove('active');
+            }
+        }
+
+        function hideSelectedElement() {
+            if (!selectedMesh) return;
+
+            if (originalMaterial) {
+                selectedMesh.material = originalMaterial;
+            }
+
+            selectedMesh.visible = false;
+            hiddenMeshes.add(selectedMesh);
+
+            log(`Elemento oculto: Mesh #${currentModel.children.indexOf(selectedMesh)}`, 'info');
+
+            selectedMesh = null;
+            originalMaterial = null;
+            document.getElementById('selection-panel').classList.remove('active');
+
+            updateHiddenCounter();
+        }
+
+        function isolateSelectedElement() {
+            if (!selectedMesh || !currentModel) return;
+
+            const meshToIsolate = selectedMesh;
+
+            if (originalMaterial) {
+                meshToIsolate.material = originalMaterial;
+            }
+
+            currentModel.children.forEach(child => {
+                if (child !== meshToIsolate && child.visible) {
+                    child.visible = false;
+                    hiddenMeshes.add(child);
+                }
+            });
+
+            log(`Elemento isolado: Mesh #${currentModel.children.indexOf(meshToIsolate)}`, 'success');
+
+            selectedMesh = null;
+            originalMaterial = null;
+            document.getElementById('selection-panel').classList.remove('active');
+
+            updateHiddenCounter();
+
+            const box = new THREE.Box3().setFromObject(meshToIsolate);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            camera.position.set(center.x + maxDim * 2, center.y + maxDim, center.z + maxDim * 2);
+            controls.target.copy(center);
+            controls.update();
+        }
+
+        function showAllElements() {
+            if (!currentModel) return;
+
+            hiddenMeshes.forEach(mesh => {
+                mesh.visible = true;
+            });
+
+            const count = hiddenMeshes.size;
+            hiddenMeshes.clear();
+
+            log(`${count} elementos restaurados`, 'success');
+            updateHiddenCounter();
+        }
+
+        function setModelTransparency(opacity) {
+            if (!currentModel) return;
+
+            globalOpacity = opacity;
+
+            currentModel.children.forEach(mesh => {
+                if (mesh.material && mesh !== selectedMesh) {
+                    if (!originalOpacities.has(mesh)) {
+                        originalOpacities.set(mesh, mesh.material.opacity);
+                    }
+
+                    const originalOpacity = originalOpacities.get(mesh);
+                    mesh.material.opacity = originalOpacity * opacity;
+                    mesh.material.transparent = opacity < 1 || originalOpacity < 1;
+                    mesh.material.needsUpdate = true;
+                }
+            });
+        }
+
+        function handleTransparencyChange(event) {
+            const value = event.target.value;
+            const opacity = value / 100;
+            document.getElementById('transparency-value').textContent = value + '%';
+            setModelTransparency(opacity);
+        }
+
+        function updateModelBounds() {
+            if (!currentModel) return;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            modelBounds.min.copy(box.min);
+            modelBounds.max.copy(box.max);
+        }
+
+        function toggleClipping() {
+            clippingEnabled = !clippingEnabled;
+            const btn = document.getElementById('btn-clip-toggle');
+
+            if (clippingEnabled) {
+                btn.textContent = '✂️ Desativar';
+                btn.classList.add('active');
+                applyClippingToModel();
+                log('Plano de corte ativado', 'success');
+            } else {
+                btn.textContent = '✂️ Ativar';
+                btn.classList.remove('active');
+                removeClippingFromModel();
+                log('Plano de corte desativado', 'info');
+            }
+        }
+
+        function applyClippingToModel() {
+            if (!currentModel) return;
+            currentModel.children.forEach(mesh => {
+                if (mesh.material) {
+                    mesh.material.clippingPlanes = [clippingPlane];
+                    mesh.material.clipShadows = true;
+                    mesh.material.needsUpdate = true;
+                }
+            });
+        }
+
+        function removeClippingFromModel() {
+            if (!currentModel) return;
+            currentModel.children.forEach(mesh => {
+                if (mesh.material) {
+                    mesh.material.clippingPlanes = [];
+                    mesh.material.needsUpdate = true;
+                }
+            });
+        }
+
+        function updateClippingPlane(axis, value) {
+            if (!currentModel) return;
+
+            currentClipAxis = axis;
+            const range = modelBounds.max[axis] - modelBounds.min[axis];
+            const position = modelBounds.min[axis] + (range * value / 100);
+
+            const normal = new THREE.Vector3();
+            if (axis === 'x') normal.set(clippingFlipped ? 1 : -1, 0, 0);
+            if (axis === 'y') normal.set(0, clippingFlipped ? 1 : -1, 0);
+            if (axis === 'z') normal.set(0, 0, clippingFlipped ? 1 : -1);
+
+            clippingPlane.normal.copy(normal);
+            clippingPlane.constant = clippingFlipped ? -position : position;
+        }
+
+        function handleClipX(event) {
+            updateClippingPlane('x', event.target.value);
+            document.getElementById('clip-y').value = 100;
+            document.getElementById('clip-z').value = 100;
+        }
+
+        function handleClipY(event) {
+            updateClippingPlane('y', event.target.value);
+            document.getElementById('clip-x').value = 100;
+            document.getElementById('clip-z').value = 100;
+        }
+
+        function handleClipZ(event) {
+            updateClippingPlane('z', event.target.value);
+            document.getElementById('clip-x').value = 100;
+            document.getElementById('clip-y').value = 100;
+        }
+
+        function flipClipping() {
+            clippingFlipped = !clippingFlipped;
+            const currentSlider = document.getElementById('clip-' + currentClipAxis);
+            updateClippingPlane(currentClipAxis, currentSlider.value);
+            log(`Direção do corte invertida`, 'info');
+        }
+
+        function resetClipping() {
+            document.getElementById('clip-x').value = 100;
+            document.getElementById('clip-y').value = 100;
+            document.getElementById('clip-z').value = 100;
+            clippingFlipped = false;
+            currentClipAxis = 'x';
+            updateClippingPlane('x', 100);
+            log('Plano de corte resetado', 'info');
+        }
+
+        function toggleMeasureMode() {
+            measureMode = !measureMode;
+            const btn = document.getElementById('btn-measure-toggle');
+            const canvas = document.getElementById('canvas');
+
+            if (measureMode) {
+                btn.textContent = '📏 Medindo...';
+                btn.classList.add('active');
+                canvas.classList.add('measuring');
+                clearSelection(false);
+                log('Modo de medição ativado. Clique no primeiro ponto.', 'info');
+            } else {
+                btn.textContent = '📏 Medir';
+                btn.classList.remove('active');
+                canvas.classList.remove('measuring');
+                log('Modo de medição desativado', 'info');
+            }
+        }
+
+        function addMeasurePoint(point) {
+            const sphereGeom = new THREE.SphereGeometry(0.15, 16, 16);
+            const sphere = new THREE.Mesh(sphereGeom, measureSphereMaterial);
+            sphere.position.copy(point);
+            scene.add(sphere);
+            measureSpheres.push(sphere);
+
+            if (!measurePoint1) {
+                measurePoint1 = point.clone();
+                document.getElementById('measure-points').textContent =
+                    `P1: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)}) → Clique no segundo ponto`;
+                log(`Ponto 1: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)})`, 'info');
+            } else {
+                measurePoint2 = point.clone();
+
+                const distance = measurePoint1.distanceTo(measurePoint2);
+
+                const geometry = new THREE.BufferGeometry().setFromPoints([measurePoint1, measurePoint2]);
+                measureLine = new THREE.Line(geometry, measureMaterial);
+                scene.add(measureLine);
+
+                document.getElementById('measure-distance').textContent = distance.toFixed(3);
+                document.getElementById('measure-points').textContent =
+                    `P1: (${measurePoint1.x.toFixed(2)}, ${measurePoint1.y.toFixed(2)}, ${measurePoint1.z.toFixed(2)})\n` +
+                    `P2: (${measurePoint2.x.toFixed(2)}, ${measurePoint2.y.toFixed(2)}, ${measurePoint2.z.toFixed(2)})`;
+
+                log(`Distância: ${distance.toFixed(3)} metros`, 'success');
+
+                toggleMeasureMode();
+            }
+        }
+
+        function clearMeasurement() {
+            if (measureLine) {
+                scene.remove(measureLine);
+                measureLine.geometry.dispose();
+                measureLine = null;
+            }
+
+            measureSpheres.forEach(sphere => {
+                scene.remove(sphere);
+                sphere.geometry.dispose();
+            });
+            measureSpheres = [];
+
+            measurePoint1 = null;
+            measurePoint2 = null;
+
+            document.getElementById('measure-distance').textContent = '-';
+            document.getElementById('measure-points').textContent = 'Clique em dois pontos para medir';
+
+            log('Medição limpa', 'info');
+        }
+
+        function handleMeasureClick(event) {
+            if (!measureMode || !currentModel) return;
+
+            const container = document.getElementById('viewer-container');
+            const rect = container.getBoundingClientRect();
+
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentModel, true);
+
+            if (intersects.length > 0) {
+                addMeasurePoint(intersects[0].point);
+            }
+        }
+
+        function animateToView(targetPosition, targetLookAt, viewName) {
+            if (!currentModel) return;
+
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = maxDim * 1.8;
+
+            const endPosition = new THREE.Vector3();
+            endPosition.copy(center).add(targetPosition.clone().multiplyScalar(distance));
+
+            const startPosition = camera.position.clone();
+            const startTarget = controls.target.clone();
+            const duration = 500;
+            const startTime = Date.now();
+
+            function animateView() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+
+                camera.position.lerpVectors(startPosition, endPosition, eased);
+                controls.target.lerpVectors(startTarget, center, eased);
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateView);
+                } else {
+                    log(`Vista: ${viewName}`, 'success');
+                }
+            }
+            animateView();
+        }
+
+        function setViewFront() { animateToView(new THREE.Vector3(0, 0, 1), null, 'Frontal'); }
+        function setViewBack() { animateToView(new THREE.Vector3(0, 0, -1), null, 'Traseira'); }
+        function setViewLeft() { animateToView(new THREE.Vector3(-1, 0, 0), null, 'Esquerda'); }
+        function setViewRight() { animateToView(new THREE.Vector3(1, 0, 0), null, 'Direita'); }
+        function setViewTop() { animateToView(new THREE.Vector3(0, 1, 0.001), null, 'Topo'); }
+        function setViewBottom() { animateToView(new THREE.Vector3(0, -1, 0.001), null, 'Inferior'); }
+        function setViewIsometric() { animateToView(new THREE.Vector3(1, 1, 1).normalize(), null, 'Isométrica'); }
+
+        // Event listeners
+        document.getElementById('btn-fit').addEventListener('click', fitModel);
+        document.getElementById('btn-center-orbit').addEventListener('click', centerOrbitOnModel);
+        document.getElementById('btn-grid').addEventListener('click', toggleGrid);
+        document.getElementById('canvas').addEventListener('dblclick', setOrbitCenter);
+        document.getElementById('canvas').addEventListener('click', selectElement);
+        document.getElementById('btn-clear-selection').addEventListener('click', () => clearSelection(true));
+        document.getElementById('btn-hide-element').addEventListener('click', hideSelectedElement);
+        document.getElementById('btn-isolate-element').addEventListener('click', isolateSelectedElement);
+        document.getElementById('btn-show-all').addEventListener('click', showAllElements);
+        document.getElementById('transparency-slider').addEventListener('input', handleTransparencyChange);
+        document.getElementById('btn-clip-toggle').addEventListener('click', toggleClipping);
+        document.getElementById('btn-clip-flip').addEventListener('click', flipClipping);
+        document.getElementById('btn-clip-reset').addEventListener('click', resetClipping);
+        document.getElementById('clip-x').addEventListener('input', handleClipX);
+        document.getElementById('clip-y').addEventListener('input', handleClipY);
+        document.getElementById('clip-z').addEventListener('input', handleClipZ);
+        document.getElementById('btn-measure-toggle').addEventListener('click', toggleMeasureMode);
+        document.getElementById('btn-measure-clear').addEventListener('click', clearMeasurement);
+        document.getElementById('btn-view-front').addEventListener('click', setViewFront);
+        document.getElementById('btn-view-back').addEventListener('click', setViewBack);
+        document.getElementById('btn-view-left').addEventListener('click', setViewLeft);
+        document.getElementById('btn-view-right').addEventListener('click', setViewRight);
+        document.getElementById('btn-view-top').addEventListener('click', setViewTop);
+        document.getElementById('btn-view-bottom').addEventListener('click', setViewBottom);
+        document.getElementById('btn-view-iso').addEventListener('click', setViewIsometric);
+
+        // Iniciar
+        async function main() {
+            log('Iniciando...', 'info');
+            try {
+                initThreeJS();
+                await initWebIFC();
+
+                // Obter parâmetros da URL
+                const params = getUrlParams();
+
+                if (params.modelo) {
+                    log('Modelo encontrado na URL', 'info');
+                    await loadIFCFromURL(params.modelo, params.nome);
+                } else {
+                    hideLoading();
+                    document.getElementById('model-name').textContent = 'Nenhum modelo especificado';
+                    log('Nenhum modelo especificado na URL. Use ?modelo=URL&nome=Nome', 'warning');
+                    alert('Nenhum modelo especificado.\n\nUse o formato: viewer.html?modelo=URL_DO_IFC&nome=Nome_do_Modelo');
+                }
+            } catch (err) {
+                log(`Falha na inicialização: ${err.message}`, 'error');
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
