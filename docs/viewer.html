@@ -739,24 +739,21 @@
                 log(`Baixando: ${name}`, 'info');
                 showLoading('Baixando modelo...', 30);
 
-                // Usar proxy CORS para contornar restrições do GitHub Releases
-                // Tenta primeiro sem proxy (caso funcione), depois com proxy
-                let response;
+                // URLs do GitHub precisam de proxy CORS
+                // Usar proxy diretamente para evitar erro de CORS
                 let fetchUrl = url;
 
-                try {
-                    // Primeira tentativa: direto (pode funcionar em alguns casos)
-                    response = await fetch(url);
-                } catch (corsError) {
-                    // Se falhar por CORS, usar proxy
-                    log('Usando proxy CORS...', 'info');
-                    // Proxy alternativo: corsproxy.io
+                // Se for URL do GitHub, usar proxy CORS
+                if (url.includes('github.com')) {
+                    log('Usando proxy CORS para GitHub...', 'info');
                     fetchUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                    response = await fetch(fetchUrl);
                 }
 
-                // Se ainda não funcionou, tentar outro proxy
-                if (!response.ok) {
+                let response;
+                try {
+                    response = await fetch(fetchUrl);
+                } catch (fetchError) {
+                    // Se proxy principal falhar, tentar alternativo
                     log('Tentando proxy alternativo...', 'info');
                     fetchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                     response = await fetch(fetchUrl);
