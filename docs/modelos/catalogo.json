@@ -1,0 +1,32 @@
+{
+  "projetos": [
+    { "id": "todos", "nome": "Todos os Projetos", "icone": "🏢" },
+    { "id": "unila", "nome": "UNILA Campus Arandu", "icone": "🎓" }
+  ],
+  "modelos": [
+    {
+      "id": "est-r-0001-pe-asbt",
+      "nome": "EST_R_0001_PE_ASBT",
+      "descricao": "Modelo estrutural - UNILA Campus Arandu",
+      "projeto": "unila",
+      "thumbnail": "modelos/thumbnails/placeholder.png",
+      "url": "https://github.com/Gabrielaragaosantos/ANKARA-ENGENHARIA/releases/download/IFC/EST_R_0001_PE_ASBT_R06.ifc",
+      "tamanho": "50-100 MB",
+      "formato": "IFC 4",
+      "autor": "Consórcio MPD/Ankara",
+      "data": "2025-01"
+    },
+    {
+      "id": "est-s-0001-pe-mode",
+      "nome": "EST_S_0001_PE_MODE",
+      "descricao": "Modelo estrutural - UNILA Campus Arandu",
+      "projeto": "unila",
+      "thumbnail": "modelos/thumbnails/placeholder.png",
+      "url": "https://github.com/Gabrielaragaosantos/ANKARA-ENGENHARIA/releases/download/IFC/EST_S_0001_PE_MODE_R05.ifc",
+      "tamanho": "50-100 MB",
+      "formato": "IFC 4",
+      "autor": "Consórcio MPD/Ankara",
+      "data": "2025-01"
+    }
+  ]
+}
