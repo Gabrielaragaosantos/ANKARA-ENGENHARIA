@@ -739,8 +739,18 @@
                 log(`Baixando: ${name}`, 'info');
                 showLoading('Baixando modelo...', 30);
 
+                // Proxy Cloudflare Workers para evitar CORS
+                const CORS_PROXY = 'https://ifc-proxy.gabrielsoudier.workers.dev/?url=';
+
+                // URLs do GitHub precisam de proxy CORS
+                let fetchUrl = url;
+                if (url.includes('github.com') || url.includes('githubusercontent.com')) {
+                    fetchUrl = CORS_PROXY + encodeURIComponent(url);
+                    log('Usando proxy CORS Cloudflare...', 'info');
+                }
+
                 // Baixar o arquivo IFC
-                const response = await fetch(url);
+                const response = await fetch(fetchUrl);
                 if (!response.ok) {
                     throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
                 }
