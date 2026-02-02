@@ -476,8 +476,11 @@
             <div id="selection-panel">
                 <h3>🎯 Elemento Selecionado</h3>
                 <p><span class="label">ID:</span> <span class="value" id="sel-id">-</span></p>
+                <p><span class="label">Tipo IFC:</span> <span class="value" id="sel-type">-</span></p>
+                <p><span class="label">Nome:</span> <span class="value" id="sel-name">-</span></p>
                 <p><span class="label">Posição:</span> <span class="value" id="sel-position">-</span></p>
                 <p><span class="label">Dimensões:</span> <span class="value" id="sel-size">-</span></p>
+                <div id="sel-properties" style="margin-top: 10px; max-height: 200px; overflow-y: auto;"></div>
                 <div class="selection-actions">
                     <button id="btn-hide-element" class="btn btn-hide">👁‍🗨 Ocultar</button>
                     <button id="btn-isolate-element" class="btn btn-isolate">🎯 Isolar</button>
@@ -580,6 +583,9 @@
         let scene, camera, renderer, controls, gridHelper;
         let ifcAPI = null;
         let currentModel = null;
+        let currentModelID = null; // ID do modelo IFC aberto
+        let expressIDToMesh = new Map(); // Mapeia expressID para mesh
+        let meshToExpressID = new Map(); // Mapeia mesh para expressID
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
         let modelName = 'Modelo';
@@ -791,7 +797,12 @@
                 const modelGroup = new THREE.Group();
                 let meshCount = 0;
 
+                // Limpar mapeamentos anteriores
+                expressIDToMesh.clear();
+                meshToExpressID.clear();
+
                 ifcAPI.StreamAllMeshes(modelID, (mesh) => {
+                    const expressID = mesh.expressID;
                     const geoms = mesh.geometries;
                     for (let i = 0; i < geoms.size(); i++) {
                         const pg = geoms.get(i);
@@ -830,6 +841,11 @@
                         const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
                         threeMesh.applyMatrix4(matrix);
 
+                        // Armazenar mapeamento expressID <-> mesh
+                        threeMesh.userData.expressID = expressID;
+                        expressIDToMesh.set(expressID, threeMesh);
+                        meshToExpressID.set(threeMesh, expressID);
+
                         modelGroup.add(threeMesh);
                         meshCount++;
                         geom.delete();
@@ -866,7 +882,10 @@
                 document.getElementById('views-panel').classList.add('active');
                 updateModelBounds();
 
-                ifcAPI.CloseModel(modelID);
+                // Manter o modelo aberto para consultar propriedades
+                currentModelID = modelID;
+                log(`Propriedades IFC disponíveis (${expressIDToMesh.size} elementos mapeados)`, 'info');
+
                 hideLoading();
                 log('Modelo carregado com sucesso!', 'success');
 
@@ -970,6 +989,109 @@
             log('Órbita centralizada no modelo', 'success');
         }
 
+        // Função para obter propriedades IFC de um elemento
+        function getIFCProperties(expressID) {
+            if (!ifcAPI || currentModelID === null) return null;
+
+            try {
+                const props = ifcAPI.GetLine(currentModelID, expressID);
+                return props;
+            } catch (e) {
+                console.warn('Erro ao obter propriedades:', e);
+                return null;
+            }
+        }
+
+        // Função para obter o tipo IFC
+        function getIFCTypeName(typeID) {
+            const types = {
+                // Elementos estruturais
+                1281925730: 'IfcWall',
+                3512223829: 'IfcWallStandardCase',
+                4208778838: 'IfcColumn',
+                3268803585: 'IfcBeam',
+                1687234759: 'IfcSlab',
+                2391406946: 'IfcPlate',
+                263784265: 'IfcFooting',
+                1252848954: 'IfcPile',
+                1810631287: 'IfcRamp',
+                1629547520: 'IfcStair',
+                331165859: 'IfcStairFlight',
+                3024970846: 'IfcRoof',
+                // Aberturas
+                3171933400: 'IfcWindow',
+                395920057: 'IfcDoor',
+                3242481149: 'IfcOpeningElement',
+                // Mobiliário e equipamentos
+                1509553395: 'IfcFurniture',
+                1911478936: 'IfcFurnishingElement',
+                1335981549: 'IfcEquipmentElement',
+                // MEP
+                3508470533: 'IfcPipeSegment',
+                3132237377: 'IfcFlowTerminal',
+                4037862832: 'IfcDuctSegment',
+                // Outros
+                1095909175: 'IfcBuildingElementProxy',
+                1973544240: 'IfcRailing',
+                2262370178: 'IfcRailing',
+                900683007: 'IfcSpace',
+                3856911033: 'IfcBuildingStorey',
+                4031249490: 'IfcBuilding',
+                4097777520: 'IfcSite',
+                413509423: 'IfcProject',
+                // Armadura
+                979691226: 'IfcReinforcingBar',
+                2320036040: 'IfcReinforcingMesh',
+                // Genéricos
+                1623761950: 'IfcMember',
+                2058353004: 'IfcFlowMovingDevice',
+                4278956645: 'IfcFlowFitting',
+                987401354: 'IfcFlowSegment',
+            };
+            return types[typeID] || `IFC Type (${typeID})`;
+        }
+
+        // Função para exibir propriedades no painel
+        function displayIFCProperties(expressID) {
+            const props = getIFCProperties(expressID);
+            const propsDiv = document.getElementById('sel-properties');
+
+            if (!props) {
+                document.getElementById('sel-type').textContent = '-';
+                document.getElementById('sel-name').textContent = '-';
+                propsDiv.innerHTML = '<p style="font-size: 11px; color: #888;">Propriedades não disponíveis</p>';
+                return;
+            }
+
+            // Tipo IFC
+            const typeName = getIFCTypeName(props.type);
+            document.getElementById('sel-type').textContent = typeName;
+
+            // Nome do elemento
+            const elementName = props.Name?.value || props.ObjectType?.value || '-';
+            document.getElementById('sel-name').textContent = elementName;
+
+            // Construir HTML das propriedades
+            let html = '<div style="font-size: 11px; border-top: 1px solid #555; padding-top: 8px; margin-top: 8px;">';
+            html += '<strong style="color: var(--cor-accent);">Propriedades IFC:</strong><br>';
+
+            // Propriedades principais
+            const mainProps = ['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag'];
+            mainProps.forEach(prop => {
+                if (props[prop] && props[prop].value) {
+                    html += `<span style="color: #888;">${prop}:</span> <span style="color: #fff;">${props[prop].value}</span><br>`;
+                }
+            });
+
+            // ExpressID
+            html += `<span style="color: #888;">ExpressID:</span> <span style="color: #fff;">${expressID}</span><br>`;
+
+            html += '</div>';
+            propsDiv.innerHTML = html;
+
+            log(`Propriedades carregadas: ${typeName} - ${elementName}`, 'info');
+        }
+
         function selectElement(event) {
             if (measureMode) {
                 handleMeasureClick(event);
@@ -1006,11 +1128,23 @@
                 box.getSize(size);
 
                 document.getElementById('selection-panel').classList.add('active');
-                document.getElementById('sel-id').textContent = `Mesh #${currentModel.children.indexOf(mesh)}`;
+
+                // Obter expressID do mesh
+                const expressID = mesh.userData.expressID || meshToExpressID.get(mesh);
+                document.getElementById('sel-id').textContent = expressID ? `#${expressID}` : `Mesh #${currentModel.children.indexOf(mesh)}`;
                 document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
                 document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
 
-                log(`Elemento selecionado: Mesh #${currentModel.children.indexOf(mesh)}`, 'success');
+                // Buscar e exibir propriedades IFC
+                if (expressID) {
+                    displayIFCProperties(expressID);
+                } else {
+                    document.getElementById('sel-type').textContent = '-';
+                    document.getElementById('sel-name').textContent = '-';
+                    document.getElementById('sel-properties').innerHTML = '';
+                }
+
+                log(`Elemento selecionado: ${expressID ? '#' + expressID : 'Mesh #' + currentModel.children.indexOf(mesh)}`, 'success');
             } else {
                 clearSelection(true);
             }
