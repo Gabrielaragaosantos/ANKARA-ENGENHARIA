@@ -1142,151 +1142,322 @@
             }
         }
 
-        // Função para obter TODAS as propriedades incluindo PropertySets e Quantitativos
-        function getAllIFCProperties(expressID) {
-            if (!ifcAPI || currentModelID === null) return null;
-
-            try {
-                // Obter propriedades básicas com recursão para pegar relacionamentos
-                const props = ifcAPI.GetLine(currentModelID, expressID, true);
-                return props;
-            } catch (e) {
-                console.warn('Erro ao obter todas as propriedades:', e);
-                return null;
+        // Função auxiliar para resolver referências IFC
+        function resolveReference(ref) {
+            if (!ref) return null;
+            if (typeof ref === 'object' && ref.value !== undefined) {
+                try {
+                    return ifcAPI.GetLine(currentModelID, ref.value, false);
+                } catch (e) {
+                    return ref;
+                }
             }
+            return ref;
         }
 
-        // Função para extrair PropertySets e Quantitativos de um elemento
-        function extractPropertySetsAndQuantities(expressID) {
-            if (!ifcAPI || currentModelID === null) return { psets: [], quantities: [] };
+        // Função auxiliar para extrair valor de uma propriedade
+        function extractPropertyValue(prop) {
+            if (!prop) return { value: null, unit: '' };
 
-            const result = { psets: [], quantities: [] };
+            // IfcPropertySingleValue
+            if (prop.NominalValue !== undefined) {
+                const val = prop.NominalValue;
+                if (typeof val === 'object' && val.value !== undefined) {
+                    return { value: val.value, unit: '' };
+                }
+                return { value: val, unit: '' };
+            }
+
+            // Quantidades
+            if (prop.LengthValue !== undefined) {
+                const v = typeof prop.LengthValue === 'object' ? prop.LengthValue.value : prop.LengthValue;
+                return { value: v, unit: 'm' };
+            }
+            if (prop.AreaValue !== undefined) {
+                const v = typeof prop.AreaValue === 'object' ? prop.AreaValue.value : prop.AreaValue;
+                return { value: v, unit: 'm²' };
+            }
+            if (prop.VolumeValue !== undefined) {
+                const v = typeof prop.VolumeValue === 'object' ? prop.VolumeValue.value : prop.VolumeValue;
+                return { value: v, unit: 'm³' };
+            }
+            if (prop.WeightValue !== undefined) {
+                const v = typeof prop.WeightValue === 'object' ? prop.WeightValue.value : prop.WeightValue;
+                return { value: v, unit: 'kg' };
+            }
+            if (prop.CountValue !== undefined) {
+                const v = typeof prop.CountValue === 'object' ? prop.CountValue.value : prop.CountValue;
+                return { value: v, unit: 'un' };
+            }
+            if (prop.TimeValue !== undefined) {
+                const v = typeof prop.TimeValue === 'object' ? prop.TimeValue.value : prop.TimeValue;
+                return { value: v, unit: 's' };
+            }
+
+            return { value: null, unit: '' };
+        }
+
+        // Função para extrair TODAS as propriedades de um elemento (PropertySets, Quantitativos, Type Properties)
+        function extractAllProperties(expressID) {
+            if (!ifcAPI || currentModelID === null) return { psets: [], quantities: [], typeProps: [], materials: [] };
+
+            const result = { psets: [], quantities: [], typeProps: [], materials: [] };
 
             try {
-                // Obter todas as linhas do modelo para buscar relações
-                const props = ifcAPI.GetLine(currentModelID, expressID, true);
+                // Obter o elemento com relações
+                const element = ifcAPI.GetLine(currentModelID, expressID, false);
+                if (!element) return result;
 
-                // Buscar IsDefinedBy (contém PropertySets e QuantitySets)
-                if (props.IsDefinedBy) {
-                    const definitions = Array.isArray(props.IsDefinedBy) ? props.IsDefinedBy : [props.IsDefinedBy];
+                // 1. BUSCAR IsDefinedBy - PropertySets e QuantitySets diretos
+                if (element.IsDefinedBy) {
+                    const definitions = Array.isArray(element.IsDefinedBy) ? element.IsDefinedBy : [element.IsDefinedBy];
 
                     definitions.forEach(defRef => {
                         try {
-                            const def = typeof defRef === 'object' && defRef.value
-                                ? ifcAPI.GetLine(currentModelID, defRef.value, true)
-                                : defRef;
-
-                            if (!def) return;
+                            const relDefines = resolveReference(defRef);
+                            if (!relDefines) return;
 
                             // IfcRelDefinesByProperties
-                            if (def.RelatingPropertyDefinition) {
-                                const psetRef = def.RelatingPropertyDefinition;
-                                const pset = typeof psetRef === 'object' && psetRef.value
-                                    ? ifcAPI.GetLine(currentModelID, psetRef.value, true)
-                                    : psetRef;
+                            if (relDefines.RelatingPropertyDefinition) {
+                                const psetRef = relDefines.RelatingPropertyDefinition;
+                                const pset = resolveReference(psetRef);
 
-                                if (pset && pset.Name) {
-                                    const psetName = pset.Name.value || pset.Name;
+                                if (pset) {
+                                    const psetName = pset.Name?.value || pset.Name || 'Sem Nome';
+                                    processPropertySet(pset, psetName, result);
+                                }
+                            }
 
-                                    // Verificar se é QuantitySet ou PropertySet
-                                    if (pset.Quantities) {
-                                        // É um IfcElementQuantity
-                                        const quantities = [];
-                                        const qtyList = Array.isArray(pset.Quantities) ? pset.Quantities : [pset.Quantities];
+                            // IfcRelDefinesByType - Propriedades do Tipo
+                            if (relDefines.RelatingType) {
+                                const typeRef = relDefines.RelatingType;
+                                const typeElement = resolveReference(typeRef);
 
-                                        qtyList.forEach(qtyRef => {
-                                            try {
-                                                const qty = typeof qtyRef === 'object' && qtyRef.value
-                                                    ? ifcAPI.GetLine(currentModelID, qtyRef.value, true)
-                                                    : qtyRef;
+                                if (typeElement) {
+                                    const typeName = typeElement.Name?.value || typeElement.Name || 'Tipo';
 
-                                                if (qty && qty.Name) {
-                                                    const qtyName = qty.Name.value || qty.Name;
-                                                    let qtyValue = null;
-                                                    let qtyUnit = '';
+                                    // Propriedades do Type
+                                    if (typeElement.HasPropertySets) {
+                                        const typePsets = Array.isArray(typeElement.HasPropertySets)
+                                            ? typeElement.HasPropertySets
+                                            : [typeElement.HasPropertySets];
 
-                                                    // Extrair valor baseado no tipo de quantidade
-                                                    if (qty.LengthValue !== undefined) {
-                                                        qtyValue = qty.LengthValue.value || qty.LengthValue;
-                                                        qtyUnit = 'm';
-                                                    } else if (qty.AreaValue !== undefined) {
-                                                        qtyValue = qty.AreaValue.value || qty.AreaValue;
-                                                        qtyUnit = 'm²';
-                                                    } else if (qty.VolumeValue !== undefined) {
-                                                        qtyValue = qty.VolumeValue.value || qty.VolumeValue;
-                                                        qtyUnit = 'm³';
-                                                    } else if (qty.WeightValue !== undefined) {
-                                                        qtyValue = qty.WeightValue.value || qty.WeightValue;
-                                                        qtyUnit = 'kg';
-                                                    } else if (qty.CountValue !== undefined) {
-                                                        qtyValue = qty.CountValue.value || qty.CountValue;
-                                                        qtyUnit = 'un';
-                                                    }
-
-                                                    if (qtyValue !== null) {
-                                                        quantities.push({
-                                                            name: qtyName,
-                                                            value: qtyValue,
-                                                            unit: qtyUnit
-                                                        });
-                                                    }
-                                                }
-                                            } catch (e) { }
+                                        typePsets.forEach(tpRef => {
+                                            const tpset = resolveReference(tpRef);
+                                            if (tpset) {
+                                                const tpsetName = `${typeName} - ${tpset.Name?.value || tpset.Name || 'Props'}`;
+                                                processPropertySet(tpset, tpsetName, result, true);
+                                            }
                                         });
-
-                                        if (quantities.length > 0) {
-                                            result.quantities.push({
-                                                name: psetName,
-                                                items: quantities
-                                            });
-                                        }
-                                    } else if (pset.HasProperties) {
-                                        // É um IfcPropertySet
-                                        const properties = [];
-                                        const propList = Array.isArray(pset.HasProperties) ? pset.HasProperties : [pset.HasProperties];
-
-                                        propList.forEach(propRef => {
-                                            try {
-                                                const prop = typeof propRef === 'object' && propRef.value
-                                                    ? ifcAPI.GetLine(currentModelID, propRef.value, true)
-                                                    : propRef;
-
-                                                if (prop && prop.Name) {
-                                                    const propName = prop.Name.value || prop.Name;
-                                                    let propValue = null;
-
-                                                    // Extrair valor
-                                                    if (prop.NominalValue !== undefined) {
-                                                        propValue = prop.NominalValue.value !== undefined
-                                                            ? prop.NominalValue.value
-                                                            : prop.NominalValue;
-                                                    }
-
-                                                    properties.push({
-                                                        name: propName,
-                                                        value: propValue
-                                                    });
-                                                }
-                                            } catch (e) { }
-                                        });
-
-                                        if (properties.length > 0) {
-                                            result.psets.push({
-                                                name: psetName,
-                                                items: properties
-                                            });
-                                        }
                                     }
                                 }
                             }
-                        } catch (e) { }
+                        } catch (e) {
+                            console.warn('Erro ao processar definição:', e);
+                        }
                     });
                 }
+
+                // 2. BUSCAR IsTypedBy - Propriedades do Tipo (IFC4)
+                if (element.IsTypedBy) {
+                    const typedByList = Array.isArray(element.IsTypedBy) ? element.IsTypedBy : [element.IsTypedBy];
+
+                    typedByList.forEach(typedByRef => {
+                        try {
+                            const relTypedBy = resolveReference(typedByRef);
+                            if (relTypedBy && relTypedBy.RelatingType) {
+                                const typeElement = resolveReference(relTypedBy.RelatingType);
+
+                                if (typeElement && typeElement.HasPropertySets) {
+                                    const typeName = typeElement.Name?.value || typeElement.Name || 'Tipo';
+                                    const typePsets = Array.isArray(typeElement.HasPropertySets)
+                                        ? typeElement.HasPropertySets
+                                        : [typeElement.HasPropertySets];
+
+                                    typePsets.forEach(tpRef => {
+                                        const tpset = resolveReference(tpRef);
+                                        if (tpset) {
+                                            const tpsetName = `${typeName} - ${tpset.Name?.value || tpset.Name || 'Props'}`;
+                                            processPropertySet(tpset, tpsetName, result, true);
+                                        }
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Erro ao processar IsTypedBy:', e);
+                        }
+                    });
+                }
+
+                // 3. BUSCAR HasAssociations - Materiais e Classificações
+                if (element.HasAssociations) {
+                    const associations = Array.isArray(element.HasAssociations) ? element.HasAssociations : [element.HasAssociations];
+
+                    associations.forEach(assocRef => {
+                        try {
+                            const assoc = resolveReference(assocRef);
+                            if (!assoc) return;
+
+                            // IfcRelAssociatesMaterial
+                            if (assoc.RelatingMaterial) {
+                                const material = resolveReference(assoc.RelatingMaterial);
+                                if (material) {
+                                    const matInfo = extractMaterialInfo(material);
+                                    if (matInfo) {
+                                        result.materials.push(matInfo);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Erro ao processar associação:', e);
+                        }
+                    });
+                }
+
             } catch (e) {
-                console.warn('Erro ao extrair PropertySets:', e);
+                console.warn('Erro ao extrair propriedades:', e);
             }
 
             return result;
+        }
+
+        // Função para processar um PropertySet ou QuantitySet
+        function processPropertySet(pset, psetName, result, isTypeProperty = false) {
+            // IfcElementQuantity - Quantitativos
+            if (pset.Quantities) {
+                const quantities = [];
+                const qtyList = Array.isArray(pset.Quantities) ? pset.Quantities : [pset.Quantities];
+
+                qtyList.forEach(qtyRef => {
+                    try {
+                        const qty = resolveReference(qtyRef);
+                        if (qty && qty.Name) {
+                            const qtyName = qty.Name?.value || qty.Name;
+                            const { value, unit } = extractPropertyValue(qty);
+
+                            if (value !== null) {
+                                quantities.push({ name: qtyName, value, unit });
+                            }
+                        }
+                    } catch (e) { }
+                });
+
+                if (quantities.length > 0) {
+                    result.quantities.push({ name: psetName, items: quantities });
+                }
+            }
+
+            // IfcPropertySet - Propriedades
+            if (pset.HasProperties) {
+                const properties = [];
+                const propList = Array.isArray(pset.HasProperties) ? pset.HasProperties : [pset.HasProperties];
+
+                propList.forEach(propRef => {
+                    try {
+                        const prop = resolveReference(propRef);
+                        if (prop && prop.Name) {
+                            const propName = prop.Name?.value || prop.Name;
+                            const { value, unit } = extractPropertyValue(prop);
+
+                            // Também verificar propriedades complexas
+                            let finalValue = value;
+                            if (finalValue === null && prop.NominalValue) {
+                                finalValue = prop.NominalValue?.value ?? prop.NominalValue;
+                            }
+
+                            properties.push({
+                                name: propName,
+                                value: finalValue,
+                                unit: unit
+                            });
+                        }
+                    } catch (e) { }
+                });
+
+                if (properties.length > 0) {
+                    if (isTypeProperty) {
+                        result.typeProps.push({ name: psetName, items: properties });
+                    } else {
+                        result.psets.push({ name: psetName, items: properties });
+                    }
+                }
+            }
+        }
+
+        // Função para extrair informações de material
+        function extractMaterialInfo(material) {
+            if (!material) return null;
+
+            const info = { name: 'Material', items: [] };
+
+            // IfcMaterial simples
+            if (material.Name) {
+                info.items.push({
+                    name: 'Nome',
+                    value: material.Name?.value || material.Name
+                });
+            }
+
+            // IfcMaterialLayerSetUsage ou IfcMaterialLayerSet
+            if (material.ForLayerSet) {
+                const layerSet = resolveReference(material.ForLayerSet);
+                if (layerSet) {
+                    info.name = layerSet.LayerSetName?.value || 'Camadas de Material';
+
+                    if (layerSet.MaterialLayers) {
+                        const layers = Array.isArray(layerSet.MaterialLayers)
+                            ? layerSet.MaterialLayers
+                            : [layerSet.MaterialLayers];
+
+                        layers.forEach((layerRef, idx) => {
+                            const layer = resolveReference(layerRef);
+                            if (layer) {
+                                const mat = resolveReference(layer.Material);
+                                const matName = mat?.Name?.value || mat?.Name || 'Camada';
+                                const thickness = layer.LayerThickness?.value || layer.LayerThickness;
+
+                                info.items.push({
+                                    name: `Camada ${idx + 1}`,
+                                    value: `${matName}${thickness ? ` (${thickness}m)` : ''}`
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+
+            // IfcMaterialConstituentSet
+            if (material.MaterialConstituents) {
+                const constituents = Array.isArray(material.MaterialConstituents)
+                    ? material.MaterialConstituents
+                    : [material.MaterialConstituents];
+
+                constituents.forEach(constRef => {
+                    const constituent = resolveReference(constRef);
+                    if (constituent) {
+                        const mat = resolveReference(constituent.Material);
+                        const matName = mat?.Name?.value || mat?.Name || 'Constituinte';
+                        const constName = constituent.Name?.value || constituent.Name || '';
+
+                        info.items.push({
+                            name: constName || 'Material',
+                            value: matName
+                        });
+                    }
+                });
+            }
+
+            return info.items.length > 0 ? info : null;
+        }
+
+        // Manter compatibilidade com função antiga
+        function extractPropertySetsAndQuantities(expressID) {
+            const allProps = extractAllProperties(expressID);
+            return {
+                psets: [...allProps.psets, ...allProps.typeProps],
+                quantities: allProps.quantities,
+                materials: allProps.materials
+            };
         }
 
         // Armazenar tipos de elementos encontrados
@@ -1453,15 +1624,46 @@
 
             // Seção: PropertySets (se houver)
             if (psetsAndQtys.psets.length > 0) {
-                html += '<details style="margin-bottom: 8px;">';
-                html += '<summary style="color: #2196F3; cursor: pointer; font-weight: bold;">📦 Property Sets</summary>';
+                html += '<details open style="margin-bottom: 8px;">';
+                html += '<summary style="color: #2196F3; cursor: pointer; font-weight: bold;">📦 Property Sets (' + psetsAndQtys.psets.length + ')</summary>';
                 html += '<div style="padding-left: 10px; margin-top: 5px;">';
 
                 psetsAndQtys.psets.forEach(pset => {
-                    html += `<div style="color: #2196F3; font-weight: bold; margin-top: 5px;">${pset.name}</div>`;
+                    html += `<details style="margin: 5px 0; background: rgba(33,150,243,0.1); padding: 5px; border-radius: 4px;">`;
+                    html += `<summary style="color: #2196F3; cursor: pointer;">${pset.name} (${pset.items.length})</summary>`;
+                    html += `<div style="padding-left: 10px; margin-top: 5px;">`;
                     pset.items.forEach(prop => {
-                        const value = prop.value !== null && prop.value !== undefined ? prop.value : '-';
-                        html += `<span style="color: #888; padding-left: 10px;">${prop.name}:</span> <span style="color: #fff;">${value}</span><br>`;
+                        let value = prop.value;
+                        if (value !== null && value !== undefined) {
+                            // Formatar números
+                            if (typeof value === 'number') {
+                                value = Number.isInteger(value) ? value : value.toFixed(4);
+                            }
+                            // Adicionar unidade se houver
+                            if (prop.unit) {
+                                value = `${value} ${prop.unit}`;
+                            }
+                        } else {
+                            value = '-';
+                        }
+                        html += `<span style="color: #888;">${prop.name}:</span> <span style="color: #fff;">${value}</span><br>`;
+                    });
+                    html += `</div></details>`;
+                });
+
+                html += '</div></details>';
+            }
+
+            // Seção: Materiais (se houver)
+            if (psetsAndQtys.materials && psetsAndQtys.materials.length > 0) {
+                html += '<details style="margin-bottom: 8px;">';
+                html += '<summary style="color: #FF9800; cursor: pointer; font-weight: bold;">🧱 Materiais</summary>';
+                html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+                psetsAndQtys.materials.forEach(mat => {
+                    html += `<div style="color: #FF9800; font-weight: bold; margin-top: 5px;">${mat.name}</div>`;
+                    mat.items.forEach(item => {
+                        html += `<span style="color: #888; padding-left: 10px;">${item.name}:</span> <span style="color: #fff;">${item.value}</span><br>`;
                     });
                 });
 
