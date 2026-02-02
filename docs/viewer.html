@@ -455,6 +455,62 @@
             border-radius: 10px;
         }
 
+        #advanced-filter-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid #673AB7;
+        }
+        #advanced-filter-panel.active { display: block; }
+        #advanced-filter-panel h4 {
+            color: #673AB7;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .search-result-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin: 2px 0;
+            background: #1a1a1a;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .search-result-item:hover {
+            background: rgba(103, 58, 183, 0.3);
+        }
+        .search-result-item .result-type {
+            color: #673AB7;
+            font-size: 9px;
+            background: rgba(103, 58, 183, 0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+        .search-result-item .result-name {
+            flex: 1;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .search-result-item .result-match {
+            color: #888;
+            font-size: 10px;
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .highlight-match {
+            background: rgba(255, 235, 59, 0.3);
+            color: #FFEB3B;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
         #debug {
             background: #1a1a1a;
             padding: 10px;
@@ -587,9 +643,9 @@
             <div id="filter-panel">
                 <h4>🔍 Filtrar por Tipo IFC</h4>
                 <div style="margin-bottom: 10px;">
-                    <input type="text" id="filter-search" placeholder="Buscar tipo ou nome..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 12px;">
+                    <input type="text" id="filter-search" placeholder="Buscar tipo..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 12px;">
                 </div>
-                <div id="filter-types" style="max-height: 200px; overflow-y: auto; font-size: 12px;">
+                <div id="filter-types" style="max-height: 150px; overflow-y: auto; font-size: 12px;">
                     <p style="color: #888;">Carregue um modelo para ver os tipos</p>
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px;">
@@ -598,6 +654,30 @@
                     <button id="btn-hide-filtered" class="btn btn-hide" style="flex: 1; padding: 8px; font-size: 11px;">👁 Ocultar</button>
                 </div>
                 <div id="filter-count" style="margin-top: 8px; font-size: 11px; color: #888; text-align: center;"></div>
+            </div>
+            <div id="advanced-filter-panel">
+                <h4>🔎 Busca Avançada</h4>
+                <div style="margin-bottom: 8px;">
+                    <input type="text" id="advanced-search" placeholder="Buscar em todas propriedades..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 12px;">
+                    <p style="font-size: 10px; color: #888; margin-top: 4px;">Ex: "Pilar", "P11", "Concreto", "Volume > 1"</p>
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <select id="advanced-filter-field" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 12px;">
+                        <option value="all">Todas as propriedades</option>
+                        <option value="name">Nome do elemento</option>
+                        <option value="type">Tipo IFC</option>
+                        <option value="description">Descrição</option>
+                        <option value="tag">Tag</option>
+                        <option value="globalid">GlobalId</option>
+                        <option value="pset">Property Sets</option>
+                        <option value="quantity">Quantitativos</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button id="btn-advanced-search" class="btn" style="flex: 2; padding: 8px; font-size: 11px; background: #673AB7;">🔍 Buscar</button>
+                    <button id="btn-advanced-clear" class="btn btn-secondary" style="flex: 1; padding: 8px; font-size: 11px;">✖ Limpar</button>
+                </div>
+                <div id="advanced-search-results" style="margin-top: 8px; max-height: 120px; overflow-y: auto; font-size: 11px;"></div>
             </div>
             <div id="debug">
                 <div class="log-info">[Sistema] Aguardando inicialização...</div>
@@ -936,6 +1016,7 @@
                 document.getElementById('measure-panel').classList.add('active');
                 document.getElementById('views-panel').classList.add('active');
                 document.getElementById('filter-panel').classList.add('active');
+                document.getElementById('advanced-filter-panel').classList.add('active');
                 updateModelBounds();
 
                 // Manter o modelo aberto para consultar propriedades
@@ -1061,36 +1142,157 @@
             }
         }
 
-        // Função para obter TODAS as propriedades incluindo PropertySets
+        // Função para obter TODAS as propriedades incluindo PropertySets e Quantitativos
         function getAllIFCProperties(expressID) {
             if (!ifcAPI || currentModelID === null) return null;
 
             try {
-                // Obter propriedades básicas
-                const props = ifcAPI.GetLine(currentModelID, expressID);
-
-                // Tentar obter PropertySets usando GetPropertySets se disponível
-                let propertySets = [];
-                try {
-                    // web-ifc 0.0.46 tem GetPropertySets
-                    const psets = ifcAPI.GetLine(currentModelID, expressID, true);
-                    if (psets) {
-                        propertySets = psets;
-                    }
-                } catch (e) {
-                    // Ignorar se não disponível
-                }
-
-                return { basic: props, psets: propertySets };
+                // Obter propriedades básicas com recursão para pegar relacionamentos
+                const props = ifcAPI.GetLine(currentModelID, expressID, true);
+                return props;
             } catch (e) {
                 console.warn('Erro ao obter todas as propriedades:', e);
                 return null;
             }
         }
 
+        // Função para extrair PropertySets e Quantitativos de um elemento
+        function extractPropertySetsAndQuantities(expressID) {
+            if (!ifcAPI || currentModelID === null) return { psets: [], quantities: [] };
+
+            const result = { psets: [], quantities: [] };
+
+            try {
+                // Obter todas as linhas do modelo para buscar relações
+                const props = ifcAPI.GetLine(currentModelID, expressID, true);
+
+                // Buscar IsDefinedBy (contém PropertySets e QuantitySets)
+                if (props.IsDefinedBy) {
+                    const definitions = Array.isArray(props.IsDefinedBy) ? props.IsDefinedBy : [props.IsDefinedBy];
+
+                    definitions.forEach(defRef => {
+                        try {
+                            const def = typeof defRef === 'object' && defRef.value
+                                ? ifcAPI.GetLine(currentModelID, defRef.value, true)
+                                : defRef;
+
+                            if (!def) return;
+
+                            // IfcRelDefinesByProperties
+                            if (def.RelatingPropertyDefinition) {
+                                const psetRef = def.RelatingPropertyDefinition;
+                                const pset = typeof psetRef === 'object' && psetRef.value
+                                    ? ifcAPI.GetLine(currentModelID, psetRef.value, true)
+                                    : psetRef;
+
+                                if (pset && pset.Name) {
+                                    const psetName = pset.Name.value || pset.Name;
+
+                                    // Verificar se é QuantitySet ou PropertySet
+                                    if (pset.Quantities) {
+                                        // É um IfcElementQuantity
+                                        const quantities = [];
+                                        const qtyList = Array.isArray(pset.Quantities) ? pset.Quantities : [pset.Quantities];
+
+                                        qtyList.forEach(qtyRef => {
+                                            try {
+                                                const qty = typeof qtyRef === 'object' && qtyRef.value
+                                                    ? ifcAPI.GetLine(currentModelID, qtyRef.value, true)
+                                                    : qtyRef;
+
+                                                if (qty && qty.Name) {
+                                                    const qtyName = qty.Name.value || qty.Name;
+                                                    let qtyValue = null;
+                                                    let qtyUnit = '';
+
+                                                    // Extrair valor baseado no tipo de quantidade
+                                                    if (qty.LengthValue !== undefined) {
+                                                        qtyValue = qty.LengthValue.value || qty.LengthValue;
+                                                        qtyUnit = 'm';
+                                                    } else if (qty.AreaValue !== undefined) {
+                                                        qtyValue = qty.AreaValue.value || qty.AreaValue;
+                                                        qtyUnit = 'm²';
+                                                    } else if (qty.VolumeValue !== undefined) {
+                                                        qtyValue = qty.VolumeValue.value || qty.VolumeValue;
+                                                        qtyUnit = 'm³';
+                                                    } else if (qty.WeightValue !== undefined) {
+                                                        qtyValue = qty.WeightValue.value || qty.WeightValue;
+                                                        qtyUnit = 'kg';
+                                                    } else if (qty.CountValue !== undefined) {
+                                                        qtyValue = qty.CountValue.value || qty.CountValue;
+                                                        qtyUnit = 'un';
+                                                    }
+
+                                                    if (qtyValue !== null) {
+                                                        quantities.push({
+                                                            name: qtyName,
+                                                            value: qtyValue,
+                                                            unit: qtyUnit
+                                                        });
+                                                    }
+                                                }
+                                            } catch (e) { }
+                                        });
+
+                                        if (quantities.length > 0) {
+                                            result.quantities.push({
+                                                name: psetName,
+                                                items: quantities
+                                            });
+                                        }
+                                    } else if (pset.HasProperties) {
+                                        // É um IfcPropertySet
+                                        const properties = [];
+                                        const propList = Array.isArray(pset.HasProperties) ? pset.HasProperties : [pset.HasProperties];
+
+                                        propList.forEach(propRef => {
+                                            try {
+                                                const prop = typeof propRef === 'object' && propRef.value
+                                                    ? ifcAPI.GetLine(currentModelID, propRef.value, true)
+                                                    : propRef;
+
+                                                if (prop && prop.Name) {
+                                                    const propName = prop.Name.value || prop.Name;
+                                                    let propValue = null;
+
+                                                    // Extrair valor
+                                                    if (prop.NominalValue !== undefined) {
+                                                        propValue = prop.NominalValue.value !== undefined
+                                                            ? prop.NominalValue.value
+                                                            : prop.NominalValue;
+                                                    }
+
+                                                    properties.push({
+                                                        name: propName,
+                                                        value: propValue
+                                                    });
+                                                }
+                                            } catch (e) { }
+                                        });
+
+                                        if (properties.length > 0) {
+                                            result.psets.push({
+                                                name: psetName,
+                                                items: properties
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e) { }
+                    });
+                }
+            } catch (e) {
+                console.warn('Erro ao extrair PropertySets:', e);
+            }
+
+            return result;
+        }
+
         // Armazenar tipos de elementos encontrados
         let elementTypes = new Map(); // tipo -> [expressIDs]
         let elementNames = new Map(); // nome -> [expressIDs]
+        let elementSearchIndex = new Map(); // expressID -> { todas as propriedades como texto para busca }
 
         // Função para obter o tipo IFC
         function getIFCTypeName(typeID) {
@@ -1229,6 +1431,43 @@
 
             html += '</div></details>';
 
+            // Extrair PropertySets e Quantitativos
+            const psetsAndQtys = extractPropertySetsAndQuantities(expressID);
+
+            // Seção: Quantitativos (se houver)
+            if (psetsAndQtys.quantities.length > 0) {
+                html += '<details open style="margin-bottom: 8px;">';
+                html += '<summary style="color: #4CAF50; cursor: pointer; font-weight: bold;">📊 Quantitativos</summary>';
+                html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+                psetsAndQtys.quantities.forEach(qtySet => {
+                    html += `<div style="color: #4CAF50; font-weight: bold; margin-top: 5px;">${qtySet.name}</div>`;
+                    qtySet.items.forEach(qty => {
+                        const formattedValue = typeof qty.value === 'number' ? qty.value.toFixed(4) : qty.value;
+                        html += `<span style="color: #888; padding-left: 10px;">${qty.name}:</span> <span style="color: #fff;">${formattedValue} ${qty.unit}</span><br>`;
+                    });
+                });
+
+                html += '</div></details>';
+            }
+
+            // Seção: PropertySets (se houver)
+            if (psetsAndQtys.psets.length > 0) {
+                html += '<details style="margin-bottom: 8px;">';
+                html += '<summary style="color: #2196F3; cursor: pointer; font-weight: bold;">📦 Property Sets</summary>';
+                html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+                psetsAndQtys.psets.forEach(pset => {
+                    html += `<div style="color: #2196F3; font-weight: bold; margin-top: 5px;">${pset.name}</div>`;
+                    pset.items.forEach(prop => {
+                        const value = prop.value !== null && prop.value !== undefined ? prop.value : '-';
+                        html += `<span style="color: #888; padding-left: 10px;">${prop.name}:</span> <span style="color: #fff;">${value}</span><br>`;
+                    });
+                });
+
+                html += '</div></details>';
+            }
+
             html += '</div>';
             propsDiv.innerHTML = html;
 
@@ -1239,8 +1478,13 @@
         function indexElementTypes() {
             elementTypes.clear();
             elementNames.clear();
+            elementSearchIndex.clear();
 
-            log('Indexando tipos de elementos...', 'info');
+            log('Indexando elementos para busca...', 'info');
+            showLoading('Indexando propriedades...', 90);
+
+            let indexedCount = 0;
+            const totalElements = expressIDToMesh.size;
 
             expressIDToMesh.forEach((mesh, expressID) => {
                 const props = getIFCProperties(expressID);
@@ -1255,6 +1499,9 @@
                     // Armazenar tipo no mesh para acesso rápido
                     mesh.userData.ifcType = typeName;
                     mesh.userData.ifcName = props.Name?.value || props.ObjectType?.value || '';
+                    mesh.userData.ifcDescription = props.Description?.value || '';
+                    mesh.userData.ifcTag = props.Tag?.value || '';
+                    mesh.userData.ifcGlobalId = props.GlobalId?.value || '';
 
                     // Indexar por nome
                     const name = mesh.userData.ifcName;
@@ -1264,10 +1511,78 @@
                         }
                         elementNames.get(name).push(expressID);
                     }
+
+                    // Criar índice de busca completo
+                    const searchData = {
+                        expressID,
+                        type: typeName,
+                        name: mesh.userData.ifcName,
+                        description: mesh.userData.ifcDescription,
+                        tag: mesh.userData.ifcTag,
+                        globalId: mesh.userData.ifcGlobalId,
+                        psets: [],
+                        quantities: [],
+                        allText: '' // Texto concatenado para busca rápida
+                    };
+
+                    // Extrair PropertySets e Quantitativos para o índice
+                    const psetsAndQtys = extractPropertySetsAndQuantities(expressID);
+
+                    psetsAndQtys.psets.forEach(pset => {
+                        pset.items.forEach(prop => {
+                            searchData.psets.push({
+                                psetName: pset.name,
+                                propName: prop.name,
+                                value: prop.value
+                            });
+                        });
+                    });
+
+                    psetsAndQtys.quantities.forEach(qtySet => {
+                        qtySet.items.forEach(qty => {
+                            searchData.quantities.push({
+                                qtySetName: qtySet.name,
+                                qtyName: qty.name,
+                                value: qty.value,
+                                unit: qty.unit
+                            });
+                        });
+                    });
+
+                    // Armazenar quantitativos no mesh também
+                    mesh.userData.quantities = searchData.quantities;
+                    mesh.userData.psets = searchData.psets;
+
+                    // Criar texto de busca concatenado
+                    let allText = [
+                        typeName,
+                        searchData.name,
+                        searchData.description,
+                        searchData.tag,
+                        searchData.globalId
+                    ].join(' ');
+
+                    searchData.psets.forEach(p => {
+                        allText += ` ${p.psetName} ${p.propName} ${p.value}`;
+                    });
+
+                    searchData.quantities.forEach(q => {
+                        allText += ` ${q.qtySetName} ${q.qtyName} ${q.value}`;
+                    });
+
+                    searchData.allText = allText.toLowerCase();
+                    elementSearchIndex.set(expressID, searchData);
+                }
+
+                indexedCount++;
+                if (indexedCount % 100 === 0) {
+                    const progress = 90 + (indexedCount / totalElements) * 10;
+                    showLoading(`Indexando... ${indexedCount}/${totalElements}`, progress);
                 }
             });
 
-            log(`Indexados ${elementTypes.size} tipos de elementos`, 'success');
+            hideLoading();
+            log(`Indexados ${elementTypes.size} tipos, ${elementSearchIndex.size} elementos para busca`, 'success');
             updateFilterPanel();
         }
 
@@ -1399,6 +1714,260 @@
             updateHiddenCounter();
             log(`${expressIDs.length} elementos ocultos`, 'success');
         }
+
+        // Variável para armazenar resultados da busca avançada
+        let advancedSearchResults = [];
+
+        // Busca avançada por propriedades
+        function performAdvancedSearch() {
+            const searchTerm = document.getElementById('advanced-search').value.trim().toLowerCase();
+            const filterField = document.getElementById('advanced-filter-field').value;
+            const resultsDiv = document.getElementById('advanced-search-results');
+
+            if (!searchTerm) {
+                resultsDiv.innerHTML = '<p style="color: #888; text-align: center;">Digite um termo para buscar</p>';
+                advancedSearchResults = [];
+                return;
+            }
+
+            advancedSearchResults = [];
+            const results = [];
+
+            // Verificar se é uma busca numérica com operador (ex: "Volume > 1")
+            const numericMatch = searchTerm.match(/^(\w+)\s*(>|<|>=|<=|=)\s*([\d.]+)$/);
+
+            elementSearchIndex.forEach((data, expressID) => {
+                let matches = false;
+                let matchInfo = '';
+
+                if (numericMatch) {
+                    // Busca numérica em quantitativos
+                    const [, propName, operator, valueStr] = numericMatch;
+                    const targetValue = parseFloat(valueStr);
+
+                    data.quantities.forEach(q => {
+                        if (q.qtyName.toLowerCase().includes(propName.toLowerCase())) {
+                            const qtyValue = parseFloat(q.value);
+                            let comparison = false;
+
+                            switch (operator) {
+                                case '>': comparison = qtyValue > targetValue; break;
+                                case '<': comparison = qtyValue < targetValue; break;
+                                case '>=': comparison = qtyValue >= targetValue; break;
+                                case '<=': comparison = qtyValue <= targetValue; break;
+                                case '=': comparison = Math.abs(qtyValue - targetValue) < 0.0001; break;
+                            }
+
+                            if (comparison) {
+                                matches = true;
+                                matchInfo = `${q.qtyName}: ${qtyValue.toFixed(3)} ${q.unit}`;
+                            }
+                        }
+                    });
+                } else {
+                    // Busca por texto
+                    switch (filterField) {
+                        case 'all':
+                            if (data.allText.includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = 'Propriedade';
+                            }
+                            break;
+                        case 'name':
+                            if (data.name.toLowerCase().includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = data.name;
+                            }
+                            break;
+                        case 'type':
+                            if (data.type.toLowerCase().includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = data.type;
+                            }
+                            break;
+                        case 'description':
+                            if (data.description.toLowerCase().includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = data.description;
+                            }
+                            break;
+                        case 'tag':
+                            if (data.tag.toLowerCase().includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = data.tag;
+                            }
+                            break;
+                        case 'globalid':
+                            if (data.globalId.toLowerCase().includes(searchTerm)) {
+                                matches = true;
+                                matchInfo = data.globalId;
+                            }
+                            break;
+                        case 'pset':
+                            data.psets.forEach(p => {
+                                const searchStr = `${p.psetName} ${p.propName} ${p.value}`.toLowerCase();
+                                if (searchStr.includes(searchTerm)) {
+                                    matches = true;
+                                    matchInfo = `${p.propName}: ${p.value}`;
+                                }
+                            });
+                            break;
+                        case 'quantity':
+                            data.quantities.forEach(q => {
+                                const searchStr = `${q.qtySetName} ${q.qtyName} ${q.value}`.toLowerCase();
+                                if (searchStr.includes(searchTerm)) {
+                                    matches = true;
+                                    matchInfo = `${q.qtyName}: ${q.value} ${q.unit}`;
+                                }
+                            });
+                            break;
+                    }
+                }
+
+                if (matches) {
+                    results.push({
+                        expressID,
+                        type: data.type,
+                        name: data.name || `#${expressID}`,
+                        matchInfo
+                    });
+                }
+            });
+
+            advancedSearchResults = results.map(r => r.expressID);
+
+            // Exibir resultados
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<p style="color: #888; text-align: center;">Nenhum resultado encontrado</p>';
+            } else {
+                let html = `<p style="color: #673AB7; margin-bottom: 8px;">${results.length} elemento(s) encontrado(s)</p>`;
+
+                // Limitar a 50 resultados na exibição
+                const displayResults = results.slice(0, 50);
+
+                displayResults.forEach(result => {
+                    html += `
+                        <div class="search-result-item" data-expressid="${result.expressID}">
+                            <span class="result-type">${result.type.replace('Ifc', '')}</span>
+                            <span class="result-name">${result.name}</span>
+                            <span class="result-match">${result.matchInfo}</span>
+                        </div>
+                    `;
+                });
+
+                if (results.length > 50) {
+                    html += `<p style="color: #888; text-align: center; margin-top: 8px;">... e mais ${results.length - 50} resultados</p>`;
+                }
+
+                // Botões de ação
+                html += `
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button class="btn btn-isolate" style="flex: 1; padding: 6px; font-size: 10px;" onclick="isolateSearchResults()">🎯 Isolar Todos</button>
+                        <button class="btn btn-hide" style="flex: 1; padding: 6px; font-size: 10px;" onclick="hideSearchResults()">👁 Ocultar Todos</button>
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = html;
+
+                // Adicionar listeners para clicar nos resultados
+                resultsDiv.querySelectorAll('.search-result-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const expID = parseInt(item.dataset.expressid);
+                        selectElementByExpressID(expID);
+                    });
+                });
+            }
+
+            log(`Busca: "${searchTerm}" - ${results.length} resultados`, 'info');
+        }
+
+        // Selecionar elemento pelo expressID
+        function selectElementByExpressID(expressID) {
+            const mesh = expressIDToMesh.get(expressID);
+            if (!mesh) return;
+
+            clearSelection(false);
+
+            selectedMesh = mesh;
+            originalMaterial = mesh.material;
+            mesh.material = selectionMaterial;
+
+            // Mostrar elemento se estiver oculto
+            if (!mesh.visible) {
+                mesh.visible = true;
+                hiddenMeshes.delete(mesh);
+                updateHiddenCounter();
+            }
+
+            // Centralizar câmera no elemento
+            const box = new THREE.Box3().setFromObject(mesh);
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            camera.position.set(center.x + maxDim * 3, center.y + maxDim * 2, center.z + maxDim * 3);
+            controls.target.copy(center);
+            controls.update();
+
+            // Atualizar painel de seleção
+            document.getElementById('selection-panel').classList.add('active');
+            document.getElementById('sel-id').textContent = `#${expressID}`;
+            document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
+            document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
+
+            displayIFCProperties(expressID);
+            log(`Elemento #${expressID} selecionado`, 'success');
+        }
+
+        // Isolar resultados da busca
+        function isolateSearchResults() {
+            if (advancedSearchResults.length === 0) return;
+
+            const expressIDSet = new Set(advancedSearchResults);
+
+            currentModel.children.forEach(mesh => {
+                const meshExpressID = mesh.userData.expressID;
+                if (!expressIDSet.has(meshExpressID)) {
+                    mesh.visible = false;
+                    hiddenMeshes.add(mesh);
+                } else {
+                    mesh.visible = true;
+                    hiddenMeshes.delete(mesh);
+                }
+            });
+
+            updateHiddenCounter();
+            log(`${advancedSearchResults.length} elementos isolados`, 'success');
+        }
+
+        // Ocultar resultados da busca
+        function hideSearchResults() {
+            if (advancedSearchResults.length === 0) return;
+
+            advancedSearchResults.forEach(id => {
+                const mesh = expressIDToMesh.get(id);
+                if (mesh) {
+                    mesh.visible = false;
+                    hiddenMeshes.add(mesh);
+                }
+            });
+
+            updateHiddenCounter();
+            log(`${advancedSearchResults.length} elementos ocultos`, 'success');
+        }
+
+        // Limpar busca avançada
+        function clearAdvancedSearch() {
+            document.getElementById('advanced-search').value = '';
+            document.getElementById('advanced-search-results').innerHTML = '';
+            advancedSearchResults = [];
+        }
+
+        // Tornar funções globais para os botões inline
+        window.isolateSearchResults = isolateSearchResults;
+        window.hideSearchResults = hideSearchResults;
 
         function selectElement(event) {
             if (measureMode) {
@@ -1840,6 +2409,13 @@
         document.getElementById('btn-select-filtered').addEventListener('click', selectFilteredElements);
         document.getElementById('btn-isolate-filtered').addEventListener('click', isolateFilteredElements);
         document.getElementById('btn-hide-filtered').addEventListener('click', hideFilteredElements);
+
+        // Event listeners da busca avançada
+        document.getElementById('btn-advanced-search').addEventListener('click', performAdvancedSearch);
+        document.getElementById('btn-advanced-clear').addEventListener('click', clearAdvancedSearch);
+        document.getElementById('advanced-search').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performAdvancedSearch();
+        });
 
         // Iniciar
         async function main() {
