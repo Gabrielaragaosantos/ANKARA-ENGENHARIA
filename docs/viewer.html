@@ -415,6 +415,46 @@
         .btn-view { background: var(--cor-secundaria); }
         .btn-view:hover { background: #6D3410; }
 
+        #filter-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid #9C27B0;
+        }
+        #filter-panel.active { display: block; }
+        #filter-panel h4 {
+            color: #9C27B0;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .filter-type-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .filter-type-item:hover {
+            background: rgba(156, 39, 176, 0.2);
+        }
+        .filter-type-item input[type="checkbox"] {
+            margin-right: 8px;
+            accent-color: #9C27B0;
+        }
+        .filter-type-item .type-name {
+            flex: 1;
+            color: #fff;
+        }
+        .filter-type-item .type-count {
+            color: #888;
+            font-size: 10px;
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
         #debug {
             background: #1a1a1a;
             padding: 10px;
@@ -543,6 +583,21 @@
                     <button id="btn-view-bottom" class="btn btn-view"><span class="icon">🔻</span>Inferior</button>
                     <button id="btn-view-iso" class="btn btn-view" style="grid-column: span 2;"><span class="icon">📐</span>Isométrica</button>
                 </div>
+            </div>
+            <div id="filter-panel">
+                <h4>🔍 Filtrar por Tipo IFC</h4>
+                <div style="margin-bottom: 10px;">
+                    <input type="text" id="filter-search" placeholder="Buscar tipo ou nome..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 12px;">
+                </div>
+                <div id="filter-types" style="max-height: 200px; overflow-y: auto; font-size: 12px;">
+                    <p style="color: #888;">Carregue um modelo para ver os tipos</p>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px;">
+                    <button id="btn-select-filtered" class="btn btn-secondary" style="flex: 1; padding: 8px; font-size: 11px;">✓ Selecionar</button>
+                    <button id="btn-isolate-filtered" class="btn btn-isolate" style="flex: 1; padding: 8px; font-size: 11px;">🎯 Isolar</button>
+                    <button id="btn-hide-filtered" class="btn btn-hide" style="flex: 1; padding: 8px; font-size: 11px;">👁 Ocultar</button>
+                </div>
+                <div id="filter-count" style="margin-top: 8px; font-size: 11px; color: #888; text-align: center;"></div>
             </div>
             <div id="debug">
                 <div class="log-info">[Sistema] Aguardando inicialização...</div>
@@ -880,11 +935,15 @@
                 document.getElementById('clipping-panel').classList.add('active');
                 document.getElementById('measure-panel').classList.add('active');
                 document.getElementById('views-panel').classList.add('active');
+                document.getElementById('filter-panel').classList.add('active');
                 updateModelBounds();
 
                 // Manter o modelo aberto para consultar propriedades
                 currentModelID = modelID;
                 log(`Propriedades IFC disponíveis (${expressIDToMesh.size} elementos mapeados)`, 'info');
+
+                // Indexar tipos de elementos para o filtro
+                indexElementTypes();
 
                 hideLoading();
                 log('Modelo carregado com sucesso!', 'success');
@@ -1002,6 +1061,37 @@
             }
         }
 
+        // Função para obter TODAS as propriedades incluindo PropertySets
+        function getAllIFCProperties(expressID) {
+            if (!ifcAPI || currentModelID === null) return null;
+
+            try {
+                // Obter propriedades básicas
+                const props = ifcAPI.GetLine(currentModelID, expressID);
+
+                // Tentar obter PropertySets usando GetPropertySets se disponível
+                let propertySets = [];
+                try {
+                    // web-ifc 0.0.46 tem GetPropertySets
+                    const psets = ifcAPI.GetLine(currentModelID, expressID, true);
+                    if (psets) {
+                        propertySets = psets;
+                    }
+                } catch (e) {
+                    // Ignorar se não disponível
+                }
+
+                return { basic: props, psets: propertySets };
+            } catch (e) {
+                console.warn('Erro ao obter todas as propriedades:', e);
+                return null;
+            }
+        }
+
+        // Armazenar tipos de elementos encontrados
+        let elementTypes = new Map(); // tipo -> [expressIDs]
+        let elementNames = new Map(); // nome -> [expressIDs]
+
         // Função para obter o tipo IFC
         function getIFCTypeName(typeID) {
             const types = {
@@ -1051,6 +1141,20 @@
             return types[typeID] || `IFC Type (${typeID})`;
         }
 
+        // Função para formatar valor de propriedade
+        function formatPropertyValue(value) {
+            if (value === null || value === undefined) return '-';
+            if (typeof value === 'object') {
+                if (value.value !== undefined) return value.value;
+                if (value.type !== undefined && value.value === undefined) {
+                    // É uma referência a outro elemento
+                    return `Ref #${value.value || value.expressID || 'N/A'}`;
+                }
+                return JSON.stringify(value);
+            }
+            return String(value);
+        }
+
         // Função para exibir propriedades no painel
         function displayIFCProperties(expressID) {
             const props = getIFCProperties(expressID);
@@ -1073,23 +1177,227 @@
 
             // Construir HTML das propriedades
             let html = '<div style="font-size: 11px; border-top: 1px solid #555; padding-top: 8px; margin-top: 8px;">';
-            html += '<strong style="color: var(--cor-accent);">Propriedades IFC:</strong><br>';
 
-            // Propriedades principais
-            const mainProps = ['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag'];
-            mainProps.forEach(prop => {
+            // Seção: Identificação
+            html += '<details open style="margin-bottom: 8px;">';
+            html += '<summary style="color: var(--cor-accent); cursor: pointer; font-weight: bold;">📋 Identificação</summary>';
+            html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+            const idProps = ['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag'];
+            idProps.forEach(prop => {
                 if (props[prop] && props[prop].value) {
                     html += `<span style="color: #888;">${prop}:</span> <span style="color: #fff;">${props[prop].value}</span><br>`;
                 }
             });
-
-            // ExpressID
             html += `<span style="color: #888;">ExpressID:</span> <span style="color: #fff;">${expressID}</span><br>`;
+            html += `<span style="color: #888;">Tipo:</span> <span style="color: #fff;">${typeName}</span><br>`;
+            html += '</div></details>';
+
+            // Seção: Todas as propriedades do objeto
+            html += '<details style="margin-bottom: 8px;">';
+            html += '<summary style="color: var(--cor-primaria); cursor: pointer; font-weight: bold;">🔧 Atributos IFC</summary>';
+            html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+            // Iterar sobre todas as propriedades do objeto
+            const skipProps = ['expressID', 'type', 'GlobalId', 'Name', 'Description', 'ObjectType', 'Tag', 'OwnerHistory'];
+            for (const [key, value] of Object.entries(props)) {
+                if (skipProps.includes(key)) continue;
+                if (value === null || value === undefined) continue;
+
+                const formattedValue = formatPropertyValue(value);
+                if (formattedValue && formattedValue !== '-' && formattedValue !== '{}' && formattedValue !== 'null') {
+                    html += `<span style="color: #888;">${key}:</span> <span style="color: #fff; word-break: break-all;">${formattedValue}</span><br>`;
+                }
+            }
+            html += '</div></details>';
+
+            // Seção: Informações técnicas
+            html += '<details style="margin-bottom: 8px;">';
+            html += '<summary style="color: var(--cor-secundaria); cursor: pointer; font-weight: bold;">📐 Dados Técnicos</summary>';
+            html += '<div style="padding-left: 10px; margin-top: 5px;">';
+
+            // Representação e posicionamento
+            if (props.Representation) {
+                html += `<span style="color: #888;">Representação:</span> <span style="color: #fff;">Sim</span><br>`;
+            }
+            if (props.ObjectPlacement) {
+                html += `<span style="color: #888;">Posicionamento:</span> <span style="color: #fff;">Definido</span><br>`;
+            }
+            if (props.PredefinedType?.value) {
+                html += `<span style="color: #888;">Tipo Predefinido:</span> <span style="color: #fff;">${props.PredefinedType.value}</span><br>`;
+            }
+
+            html += '</div></details>';
 
             html += '</div>';
             propsDiv.innerHTML = html;
 
             log(`Propriedades carregadas: ${typeName} - ${elementName}`, 'info');
+        }
+
+        // Função para indexar todos os tipos de elementos
+        function indexElementTypes() {
+            elementTypes.clear();
+            elementNames.clear();
+
+            log('Indexando tipos de elementos...', 'info');
+
+            expressIDToMesh.forEach((mesh, expressID) => {
+                const props = getIFCProperties(expressID);
+                if (props) {
+                    // Indexar por tipo
+                    const typeName = getIFCTypeName(props.type);
+                    if (!elementTypes.has(typeName)) {
+                        elementTypes.set(typeName, []);
+                    }
+                    elementTypes.get(typeName).push(expressID);
+
+                    // Armazenar tipo no mesh para acesso rápido
+                    mesh.userData.ifcType = typeName;
+                    mesh.userData.ifcName = props.Name?.value || props.ObjectType?.value || '';
+
+                    // Indexar por nome
+                    const name = mesh.userData.ifcName;
+                    if (name) {
+                        if (!elementNames.has(name)) {
+                            elementNames.set(name, []);
+                        }
+                        elementNames.get(name).push(expressID);
+                    }
+                }
+            });
+
+            log(`Indexados ${elementTypes.size} tipos de elementos`, 'success');
+            updateFilterPanel();
+        }
+
+        // Atualizar painel de filtros com os tipos encontrados
+        function updateFilterPanel() {
+            const filterTypesDiv = document.getElementById('filter-types');
+            let html = '';
+
+            // Ordenar tipos por quantidade (decrescente)
+            const sortedTypes = [...elementTypes.entries()].sort((a, b) => b[1].length - a[1].length);
+
+            sortedTypes.forEach(([typeName, expressIDs]) => {
+                html += `
+                    <label class="filter-type-item">
+                        <input type="checkbox" value="${typeName}" class="filter-checkbox">
+                        <span class="type-name">${typeName}</span>
+                        <span class="type-count">${expressIDs.length}</span>
+                    </label>
+                `;
+            });
+
+            filterTypesDiv.innerHTML = html;
+            updateFilterCount();
+        }
+
+        // Filtrar lista de tipos baseado na busca
+        function filterTypesList(searchTerm) {
+            const items = document.querySelectorAll('.filter-type-item');
+            searchTerm = searchTerm.toLowerCase();
+
+            items.forEach(item => {
+                const typeName = item.querySelector('.type-name').textContent.toLowerCase();
+                if (typeName.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // Obter expressIDs dos tipos selecionados
+        function getSelectedFilterExpressIDs() {
+            const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+            const expressIDs = [];
+
+            checkboxes.forEach(cb => {
+                const typeName = cb.value;
+                if (elementTypes.has(typeName)) {
+                    expressIDs.push(...elementTypes.get(typeName));
+                }
+            });
+
+            return expressIDs;
+        }
+
+        // Atualizar contador de elementos filtrados
+        function updateFilterCount() {
+            const expressIDs = getSelectedFilterExpressIDs();
+            const countDiv = document.getElementById('filter-count');
+            if (expressIDs.length > 0) {
+                countDiv.textContent = `${expressIDs.length} elemento(s) selecionado(s)`;
+            } else {
+                countDiv.textContent = 'Selecione tipos para filtrar';
+            }
+        }
+
+        // Selecionar (destacar) elementos filtrados
+        function selectFilteredElements() {
+            const expressIDs = getSelectedFilterExpressIDs();
+            if (expressIDs.length === 0) {
+                log('Nenhum tipo selecionado para filtrar', 'warning');
+                return;
+            }
+
+            // Destacar todos os elementos do filtro
+            clearSelection(false);
+
+            expressIDs.forEach(id => {
+                const mesh = expressIDToMesh.get(id);
+                if (mesh && mesh.visible) {
+                    mesh.material = selectionMaterial.clone();
+                }
+            });
+
+            log(`${expressIDs.length} elementos destacados`, 'success');
+        }
+
+        // Isolar elementos filtrados (ocultar os outros)
+        function isolateFilteredElements() {
+            const expressIDs = getSelectedFilterExpressIDs();
+            if (expressIDs.length === 0) {
+                log('Nenhum tipo selecionado para isolar', 'warning');
+                return;
+            }
+
+            const expressIDSet = new Set(expressIDs);
+
+            currentModel.children.forEach(mesh => {
+                const meshExpressID = mesh.userData.expressID;
+                if (!expressIDSet.has(meshExpressID)) {
+                    mesh.visible = false;
+                    hiddenMeshes.add(mesh);
+                } else {
+                    mesh.visible = true;
+                    hiddenMeshes.delete(mesh);
+                }
+            });
+
+            updateHiddenCounter();
+            log(`${expressIDs.length} elementos isolados`, 'success');
+        }
+
+        // Ocultar elementos filtrados
+        function hideFilteredElements() {
+            const expressIDs = getSelectedFilterExpressIDs();
+            if (expressIDs.length === 0) {
+                log('Nenhum tipo selecionado para ocultar', 'warning');
+                return;
+            }
+
+            expressIDs.forEach(id => {
+                const mesh = expressIDToMesh.get(id);
+                if (mesh) {
+                    mesh.visible = false;
+                    hiddenMeshes.add(mesh);
+                }
+            });
+
+            updateHiddenCounter();
+            log(`${expressIDs.length} elementos ocultos`, 'success');
         }
 
         function selectElement(event) {
@@ -1523,6 +1831,15 @@
         document.getElementById('btn-view-top').addEventListener('click', setViewTop);
         document.getElementById('btn-view-bottom').addEventListener('click', setViewBottom);
         document.getElementById('btn-view-iso').addEventListener('click', setViewIsometric);
+
+        // Event listeners do painel de filtros
+        document.getElementById('filter-search').addEventListener('input', (e) => {
+            filterTypesList(e.target.value);
+        });
+        document.getElementById('filter-types').addEventListener('change', updateFilterCount);
+        document.getElementById('btn-select-filtered').addEventListener('click', selectFilteredElements);
+        document.getElementById('btn-isolate-filtered').addEventListener('click', isolateFilteredElements);
+        document.getElementById('btn-hide-filtered').addEventListener('click', hideFilteredElements);
 
         // Iniciar
         async function main() {
