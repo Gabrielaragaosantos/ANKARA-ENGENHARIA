@@ -81,6 +81,13 @@
         .btn:disabled { background: #555; cursor: not-allowed; }
         .btn-secondary { background: var(--cor-secundaria); }
         .btn-secondary:hover { background: #6D3410; }
+        .btn-back {
+            background: #546E7A;
+            text-decoration: none;
+            text-align: center;
+            display: block;
+        }
+        .btn-back:hover { background: #37474F; }
         #file-input { display: none; }
         #viewer-container { flex: 1; position: relative; }
         #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
@@ -466,6 +473,7 @@
             </div>
             <h1>🏗️ Visualizador IFC UNILA</h1>
             <p class="subtitle">Consórcio MPD/Ankara</p>
+            <a href="index.html" class="btn btn-back">⬅️ Voltar para Galeria</a>
             <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
             <input type="file" id="file-input" accept=".ifc">
             <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
