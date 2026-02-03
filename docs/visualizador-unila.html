@@ -756,6 +756,7 @@
 
             camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
             camera.position.set(50, 50, 50);
+            camera.up.set(0, 0, 1); // Z-up (convenção engenharia/arquitetura)
 
             renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
@@ -773,8 +774,12 @@
             dir2.position.set(-50, 50, -50);
             scene.add(dir2);
 
+            // Grid no plano XY (convenção Z-up para engenharia/arquitetura)
             gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
+            gridHelper.rotation.x = Math.PI / 2; // Rotaciona para plano XY (Z-up)
             scene.add(gridHelper);
+
+            // Eixos: X=vermelho, Y=verde, Z=azul (Z para cima)
             scene.add(new THREE.AxesHelper(10));
 
             window.addEventListener('resize', () => {
@@ -1707,13 +1712,13 @@
             animateView();
         }
 
-        // Vistas predefinidas
+        // Vistas predefinidas com convenção Z-up (Z = altura, XY = plano horizontal)
         function setViewFront() {
-            animateToView(new THREE.Vector3(0, 0, 1), null, 'Frontal');
+            animateToView(new THREE.Vector3(0, -1, 0), null, 'Frontal');
         }
 
         function setViewBack() {
-            animateToView(new THREE.Vector3(0, 0, -1), null, 'Traseira');
+            animateToView(new THREE.Vector3(0, 1, 0), null, 'Traseira');
         }
 
         function setViewLeft() {
@@ -1725,15 +1730,15 @@
         }
 
         function setViewTop() {
-            animateToView(new THREE.Vector3(0, 1, 0.001), null, 'Topo'); // 0.001 para evitar gimbal lock
+            animateToView(new THREE.Vector3(0, 0.001, 1), null, 'Topo'); // 0.001 para evitar gimbal lock
         }
 
         function setViewBottom() {
-            animateToView(new THREE.Vector3(0, -1, 0.001), null, 'Inferior');
+            animateToView(new THREE.Vector3(0, 0.001, -1), null, 'Inferior');
         }
 
         function setViewIsometric() {
-            animateToView(new THREE.Vector3(1, 1, 1).normalize(), null, 'Isométrica');
+            animateToView(new THREE.Vector3(1, -1, 1).normalize(), null, 'Isométrica');
         }
 
         // Event listeners
