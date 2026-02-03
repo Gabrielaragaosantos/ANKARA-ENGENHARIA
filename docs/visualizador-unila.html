@@ -317,6 +317,81 @@
         .btn-clip-flip { background: var(--cor-secundaria); }
         .btn-clip-flip:hover { background: #6D3410; }
 
+        /* Section Box */
+        #section-box-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid #9C27B0;
+            margin-top: 10px;
+        }
+        #section-box-panel.active { display: block; }
+        #section-box-panel h4 {
+            color: #9C27B0;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .section-box-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .section-box-axis {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .section-box-axis-label {
+            font-weight: bold;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .section-box-sliders {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .section-box-sliders span {
+            font-size: 10px;
+            color: var(--cor-text-muted);
+            min-width: 28px;
+        }
+        .section-box-sliders input[type="range"] {
+            flex: 1;
+            height: 5px;
+            -webkit-appearance: none;
+            background: #444;
+            border-radius: 3px;
+        }
+        .section-box-sliders input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #9C27B0;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .section-box-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .section-box-buttons .btn {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 11px;
+        }
+        .btn-sbox-toggle { background: #9C27B0; }
+        .btn-sbox-toggle:hover { background: #7B1FA2; }
+        .btn-sbox-toggle.active { background: #558B2F; }
+        .btn-sbox-reset { background: #546E7A; }
+        .btn-sbox-reset:hover { background: #37474F; }
+        .btn-sbox-fit { background: #0277BD; }
+        .btn-sbox-fit:hover { background: #01579B; }
+
         /* Painel de medição */
         #measure-panel {
             background: var(--cor-panel);
@@ -620,6 +695,44 @@
                     </div>
                 </div>
             </div>
+            <!-- Section Box Panel -->
+            <div id="section-box-panel">
+                <h4>📦 Caixa de Corte (Section Box)</h4>
+                <div class="section-box-controls">
+                    <div class="section-box-axis">
+                        <div class="section-box-axis-label axis-x">Eixo X</div>
+                        <div class="section-box-sliders">
+                            <span>Min</span>
+                            <input type="range" id="sbox-x-min" min="0" max="100" value="0">
+                            <input type="range" id="sbox-x-max" min="0" max="100" value="100">
+                            <span>Max</span>
+                        </div>
+                    </div>
+                    <div class="section-box-axis">
+                        <div class="section-box-axis-label axis-z">Eixo Y</div>
+                        <div class="section-box-sliders">
+                            <span>Min</span>
+                            <input type="range" id="sbox-y-min" min="0" max="100" value="0">
+                            <input type="range" id="sbox-y-max" min="0" max="100" value="100">
+                            <span>Max</span>
+                        </div>
+                    </div>
+                    <div class="section-box-axis">
+                        <div class="section-box-axis-label axis-y">Eixo Z (Altura)</div>
+                        <div class="section-box-sliders">
+                            <span>Min</span>
+                            <input type="range" id="sbox-z-min" min="0" max="100" value="0">
+                            <input type="range" id="sbox-z-max" min="0" max="100" value="100">
+                            <span>Max</span>
+                        </div>
+                    </div>
+                    <div class="section-box-buttons">
+                        <button id="btn-sbox-toggle" class="btn btn-sbox-toggle">📦 Ativar</button>
+                        <button id="btn-sbox-fit" class="btn btn-sbox-fit">🎯 Ajustar</button>
+                        <button id="btn-sbox-reset" class="btn btn-sbox-reset">↩️ Reset</button>
+                    </div>
+                </div>
+            </div>
             <div id="measure-panel">
                 <h4>📏 Ferramenta de Medição</h4>
                 <div class="measure-result">
@@ -715,6 +828,23 @@
         let clippingFlipped = false;
         let modelBounds = { min: new THREE.Vector3(), max: new THREE.Vector3() };
         let currentClipAxis = 'x';
+
+        // Section Box (Caixa de Corte) - 6 planos
+        let sectionBoxEnabled = false;
+        let sectionBoxPlanes = [
+            new THREE.Plane(new THREE.Vector3(1, 0, 0), 0),   // X min (+X normal)
+            new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),  // X max (-X normal)
+            new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),   // Y min (+Y normal) - Altura min
+            new THREE.Plane(new THREE.Vector3(0, -1, 0), 0),  // Y max (-Y normal) - Altura max
+            new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),   // Z min (+Z normal)
+            new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)   // Z max (-Z normal)
+        ];
+        let sectionBoxHelper = null;
+        let sectionBoxValues = {
+            xMin: 0, xMax: 100,
+            yMin: 0, yMax: 100,  // Y interno = Z visual (altura)
+            zMin: 0, zMax: 100   // Z interno = Y visual
+        };
 
         // Ferramenta de medição
         let measureMode = false;
@@ -1466,6 +1596,15 @@
             const btn = document.getElementById('btn-clip-toggle');
 
             if (clippingEnabled) {
+                // Desativar section box se estiver ativo
+                if (sectionBoxEnabled) {
+                    sectionBoxEnabled = false;
+                    document.getElementById('btn-sbox-toggle').textContent = '📦 Ativar';
+                    document.getElementById('btn-sbox-toggle').classList.remove('active');
+                    removeSectionBox();
+                    removeSectionBoxHelper();
+                }
+
                 btn.textContent = '✂️ Desativar';
                 btn.classList.add('active');
                 applyClippingToModel();
@@ -1571,6 +1710,274 @@
             updateClippingPlane('x', 100);
             log('Plano de corte resetado', 'info');
         }
+
+        // ==================== SECTION BOX ====================
+
+        function toggleSectionBox() {
+            sectionBoxEnabled = !sectionBoxEnabled;
+            const btn = document.getElementById('btn-sbox-toggle');
+            const panel = document.getElementById('section-box-panel');
+
+            if (sectionBoxEnabled) {
+                // Desativar plano de corte simples se estiver ativo
+                if (clippingEnabled) {
+                    toggleClipping();
+                }
+
+                btn.textContent = '📦 Desativar';
+                btn.classList.add('active');
+                panel.classList.add('active');
+
+                // Aplicar section box aos materiais
+                applySectionBox();
+                createSectionBoxHelper();
+
+                log('Caixa de Corte ativada', 'success');
+            } else {
+                btn.textContent = '📦 Ativar';
+                btn.classList.remove('active');
+
+                // Remover section box dos materiais
+                removeSectionBox();
+                removeSectionBoxHelper();
+
+                log('Caixa de Corte desativada', 'info');
+            }
+        }
+
+        function applySectionBox() {
+            if (!currentModel) return;
+
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => {
+                            mat.clippingPlanes = sectionBoxPlanes;
+                            mat.clipIntersection = false;
+                        });
+                    } else {
+                        child.material.clippingPlanes = sectionBoxPlanes;
+                        child.material.clipIntersection = false;
+                    }
+                }
+            });
+        }
+
+        function removeSectionBox() {
+            if (!currentModel) return;
+
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => {
+                            mat.clippingPlanes = [];
+                        });
+                    } else {
+                        child.material.clippingPlanes = [];
+                    }
+                }
+            });
+        }
+
+        function createSectionBoxHelper() {
+            removeSectionBoxHelper();
+
+            if (!currentModel || !modelBounds) return;
+
+            const box = new THREE.Box3(modelBounds.min.clone(), modelBounds.max.clone());
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+
+            // Criar geometria da caixa
+            const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+            const edges = new THREE.EdgesGeometry(geometry);
+            sectionBoxHelper = new THREE.LineSegments(
+                edges,
+                new THREE.LineBasicMaterial({ color: 0x9C27B0, linewidth: 2, transparent: true, opacity: 0.8 })
+            );
+            sectionBoxHelper.position.copy(center);
+            scene.add(sectionBoxHelper);
+
+            updateSectionBoxHelper();
+        }
+
+        function removeSectionBoxHelper() {
+            if (sectionBoxHelper) {
+                scene.remove(sectionBoxHelper);
+                sectionBoxHelper.geometry.dispose();
+                sectionBoxHelper.material.dispose();
+                sectionBoxHelper = null;
+            }
+        }
+
+        function updateSectionBoxHelper() {
+            if (!sectionBoxHelper || !modelBounds) return;
+
+            const range = {
+                x: modelBounds.max.x - modelBounds.min.x,
+                y: modelBounds.max.y - modelBounds.min.y,
+                z: modelBounds.max.z - modelBounds.min.z
+            };
+
+            // Calcular novos bounds baseado nos sliders
+            const newMin = new THREE.Vector3(
+                modelBounds.min.x + (range.x * sectionBoxValues.xMin / 100),
+                modelBounds.min.y + (range.y * sectionBoxValues.yMin / 100),
+                modelBounds.min.z + (range.z * sectionBoxValues.zMin / 100)
+            );
+            const newMax = new THREE.Vector3(
+                modelBounds.min.x + (range.x * sectionBoxValues.xMax / 100),
+                modelBounds.min.y + (range.y * sectionBoxValues.yMax / 100),
+                modelBounds.min.z + (range.z * sectionBoxValues.zMax / 100)
+            );
+
+            const size = new THREE.Vector3().subVectors(newMax, newMin);
+            const center = new THREE.Vector3().addVectors(newMin, newMax).multiplyScalar(0.5);
+
+            // Atualizar geometria do helper
+            sectionBoxHelper.geometry.dispose();
+            sectionBoxHelper.geometry = new THREE.EdgesGeometry(
+                new THREE.BoxGeometry(size.x, size.y, size.z)
+            );
+            sectionBoxHelper.position.copy(center);
+        }
+
+        function updateSectionBoxPlanes() {
+            if (!modelBounds) return;
+
+            const range = {
+                x: modelBounds.max.x - modelBounds.min.x,
+                y: modelBounds.max.y - modelBounds.min.y,
+                z: modelBounds.max.z - modelBounds.min.z
+            };
+
+            // Calcular posições dos planos
+            const xMinPos = modelBounds.min.x + (range.x * sectionBoxValues.xMin / 100);
+            const xMaxPos = modelBounds.min.x + (range.x * sectionBoxValues.xMax / 100);
+            const yMinPos = modelBounds.min.y + (range.y * sectionBoxValues.yMin / 100);
+            const yMaxPos = modelBounds.min.y + (range.y * sectionBoxValues.yMax / 100);
+            const zMinPos = modelBounds.min.z + (range.z * sectionBoxValues.zMin / 100);
+            const zMaxPos = modelBounds.min.z + (range.z * sectionBoxValues.zMax / 100);
+
+            // Atualizar planos (normal aponta para dentro da caixa)
+            sectionBoxPlanes[0].constant = -xMinPos;  // X min: plano em xMin, normal +X
+            sectionBoxPlanes[1].constant = xMaxPos;   // X max: plano em xMax, normal -X
+            sectionBoxPlanes[2].constant = -yMinPos;  // Y min (altura): plano em yMin, normal +Y
+            sectionBoxPlanes[3].constant = yMaxPos;   // Y max (altura): plano em yMax, normal -Y
+            sectionBoxPlanes[4].constant = -zMinPos;  // Z min: plano em zMin, normal +Z
+            sectionBoxPlanes[5].constant = zMaxPos;   // Z max: plano em zMax, normal -Z
+
+            updateSectionBoxHelper();
+        }
+
+        // Handlers para os sliders da Section Box
+        // Mapeamento: Label X -> X interno, Label Y -> Z interno, Label Z (Altura) -> Y interno
+        function handleSectionBoxXMin(e) {
+            sectionBoxValues.xMin = parseFloat(e.target.value);
+            if (sectionBoxValues.xMin > sectionBoxValues.xMax) {
+                sectionBoxValues.xMin = sectionBoxValues.xMax;
+                e.target.value = sectionBoxValues.xMin;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        function handleSectionBoxXMax(e) {
+            sectionBoxValues.xMax = parseFloat(e.target.value);
+            if (sectionBoxValues.xMax < sectionBoxValues.xMin) {
+                sectionBoxValues.xMax = sectionBoxValues.xMin;
+                e.target.value = sectionBoxValues.xMax;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        // Label Y -> controla Z interno
+        function handleSectionBoxYMin(e) {
+            sectionBoxValues.zMin = parseFloat(e.target.value);
+            if (sectionBoxValues.zMin > sectionBoxValues.zMax) {
+                sectionBoxValues.zMin = sectionBoxValues.zMax;
+                e.target.value = sectionBoxValues.zMin;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        function handleSectionBoxYMax(e) {
+            sectionBoxValues.zMax = parseFloat(e.target.value);
+            if (sectionBoxValues.zMax < sectionBoxValues.zMin) {
+                sectionBoxValues.zMax = sectionBoxValues.zMin;
+                e.target.value = sectionBoxValues.zMax;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        // Label Z (Altura) -> controla Y interno
+        function handleSectionBoxZMin(e) {
+            sectionBoxValues.yMin = parseFloat(e.target.value);
+            if (sectionBoxValues.yMin > sectionBoxValues.yMax) {
+                sectionBoxValues.yMin = sectionBoxValues.yMax;
+                e.target.value = sectionBoxValues.yMin;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        function handleSectionBoxZMax(e) {
+            sectionBoxValues.yMax = parseFloat(e.target.value);
+            if (sectionBoxValues.yMax < sectionBoxValues.yMin) {
+                sectionBoxValues.yMax = sectionBoxValues.yMin;
+                e.target.value = sectionBoxValues.yMax;
+            }
+            updateSectionBoxPlanes();
+        }
+
+        function resetSectionBox() {
+            sectionBoxValues = { xMin: 0, xMax: 100, yMin: 0, yMax: 100, zMin: 0, zMax: 100 };
+
+            document.getElementById('sbox-x-min').value = 0;
+            document.getElementById('sbox-x-max').value = 100;
+            document.getElementById('sbox-y-min').value = 0;
+            document.getElementById('sbox-y-max').value = 100;
+            document.getElementById('sbox-z-min').value = 0;
+            document.getElementById('sbox-z-max').value = 100;
+
+            updateSectionBoxPlanes();
+            log('Caixa de Corte resetada', 'info');
+        }
+
+        function fitSectionBoxToView() {
+            if (!currentModel) return;
+
+            // Calcular bounding box do que está visível
+            const visibleBox = new THREE.Box3();
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.visible) {
+                    visibleBox.expandByObject(child);
+                }
+            });
+
+            if (visibleBox.isEmpty()) return;
+
+            // Ajustar câmera para focar na caixa de corte atual
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            visibleBox.getCenter(center);
+            visibleBox.getSize(size);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = maxDim * 1.5;
+
+            camera.position.set(
+                center.x + distance * 0.7,
+                center.y + distance * 0.5,
+                center.z + distance * 0.7
+            );
+            controls.target.copy(center);
+            controls.update();
+
+            log('Visualização ajustada para a Caixa de Corte', 'success');
+        }
+
+        // ==================== FIM SECTION BOX ====================
 
         // Toggle modo de medição
         function toggleMeasureMode() {
@@ -1787,6 +2194,17 @@
         document.getElementById('clip-x').addEventListener('input', handleClipX);
         document.getElementById('clip-y').addEventListener('input', handleClipY);
         document.getElementById('clip-z').addEventListener('input', handleClipZ);
+
+        // Section Box event listeners
+        document.getElementById('btn-sbox-toggle').addEventListener('click', toggleSectionBox);
+        document.getElementById('btn-sbox-reset').addEventListener('click', resetSectionBox);
+        document.getElementById('btn-sbox-fit').addEventListener('click', fitSectionBoxToView);
+        document.getElementById('sbox-x-min').addEventListener('input', handleSectionBoxXMin);
+        document.getElementById('sbox-x-max').addEventListener('input', handleSectionBoxXMax);
+        document.getElementById('sbox-y-min').addEventListener('input', handleSectionBoxYMin);
+        document.getElementById('sbox-y-max').addEventListener('input', handleSectionBoxYMax);
+        document.getElementById('sbox-z-min').addEventListener('input', handleSectionBoxZMin);
+        document.getElementById('sbox-z-max').addEventListener('input', handleSectionBoxZMax);
 
         // Controles de medição
         document.getElementById('btn-measure-toggle').addEventListener('click', toggleMeasureMode);
