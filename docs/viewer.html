@@ -833,11 +833,11 @@
                         <input type="range" id="clip-x" min="0" max="100" value="100">
                     </div>
                     <div class="clipping-axis">
-                        <label class="axis-y">Y</label>
+                        <label class="axis-z">Y</label>
                         <input type="range" id="clip-y" min="0" max="100" value="100">
                     </div>
                     <div class="clipping-axis">
-                        <label class="axis-z">Z</label>
+                        <label class="axis-y">Z (Altura)</label>
                         <input type="range" id="clip-z" min="0" max="100" value="100">
                     </div>
                     <div class="clipping-buttons">
@@ -1027,7 +1027,6 @@
 
             camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
             camera.position.set(50, 50, 50);
-            camera.up.set(0, 0, 1); // Z-up (convenção engenharia/arquitetura)
 
             renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
@@ -1045,12 +1044,11 @@
             dir2.position.set(-50, 50, -50);
             scene.add(dir2);
 
-            // Grid no plano XY (convenção Z-up para engenharia/arquitetura)
+            // Grid no plano XZ (Y=0, padrão Three.js)
             gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
-            gridHelper.rotation.x = Math.PI / 2; // Rotaciona para plano XY (Z-up)
             scene.add(gridHelper);
 
-            // Eixos: X=vermelho, Y=verde, Z=azul (Z para cima)
+            // Eixos: X=vermelho, Y=verde, Z=azul
             scene.add(new THREE.AxesHelper(10));
 
             window.addEventListener('resize', () => {
@@ -2194,6 +2192,10 @@
             clippingPlane.constant = clippingFlipped ? -position : position;
         }
 
+        // Mapeamento de eixos: IFC usa Z-up, Three.js usa Y-up
+        // Label X -> eixo X interno
+        // Label Y (clip-y) -> eixo Z interno (profundidade IFC)
+        // Label Z Altura (clip-z) -> eixo Y interno (altura IFC)
         function handleClipX(event) {
             updateClippingPlane('x', event.target.value);
             document.getElementById('clip-y').value = 100;
@@ -2201,13 +2203,15 @@
         }
 
         function handleClipY(event) {
-            updateClippingPlane('y', event.target.value);
+            // Label Y no HTML controla eixo Z interno
+            updateClippingPlane('z', event.target.value);
             document.getElementById('clip-x').value = 100;
             document.getElementById('clip-z').value = 100;
         }
 
         function handleClipZ(event) {
-            updateClippingPlane('z', event.target.value);
+            // Label Z (Altura) no HTML controla eixo Y interno
+            updateClippingPlane('y', event.target.value);
             document.getElementById('clip-x').value = 100;
             document.getElementById('clip-y').value = 100;
         }
@@ -2356,14 +2360,15 @@
             animateView();
         }
 
-        // Vistas com convenção Z-up (Z = altura, XY = plano horizontal)
-        function setViewFront() { animateToView(new THREE.Vector3(0, -1, 0), null, 'Frontal'); }
-        function setViewBack() { animateToView(new THREE.Vector3(0, 1, 0), null, 'Traseira'); }
-        function setViewLeft() { animateToView(new THREE.Vector3(-1, 0, 0), null, 'Esquerda'); }
-        function setViewRight() { animateToView(new THREE.Vector3(1, 0, 0), null, 'Direita'); }
-        function setViewTop() { animateToView(new THREE.Vector3(0, 0.001, 1), null, 'Topo'); }
-        function setViewBottom() { animateToView(new THREE.Vector3(0, 0.001, -1), null, 'Inferior'); }
-        function setViewIsometric() { animateToView(new THREE.Vector3(1, -1, 1).normalize(), null, 'Isométrica'); }
+        // Vistas - Three.js usa Y-up internamente, mas IFC usa Z-up
+        // As vistas são nomeadas conforme convenção IFC (Z = altura)
+        function setViewFront() { animateToView(new THREE.Vector3(0, 0, 1), null, 'Frontal (Y-)'); }
+        function setViewBack() { animateToView(new THREE.Vector3(0, 0, -1), null, 'Traseira (Y+)'); }
+        function setViewLeft() { animateToView(new THREE.Vector3(-1, 0, 0), null, 'Esquerda (X-)'); }
+        function setViewRight() { animateToView(new THREE.Vector3(1, 0, 0), null, 'Direita (X+)'); }
+        function setViewTop() { animateToView(new THREE.Vector3(0, 1, 0.001), null, 'Topo (Z+)'); }
+        function setViewBottom() { animateToView(new THREE.Vector3(0, -1, 0.001), null, 'Inferior (Z-)'); }
+        function setViewIsometric() { animateToView(new THREE.Vector3(1, 1, 1).normalize(), null, 'Isométrica'); }
 
         // Event listeners
         document.getElementById('btn-fit').addEventListener('click', fitModel);
