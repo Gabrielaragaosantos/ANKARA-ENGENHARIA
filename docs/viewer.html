@@ -185,40 +185,159 @@
             border-radius: 8px;
             display: none;
             border-left: 3px solid var(--cor-accent);
-            max-height: 60vh;
-            overflow-y: auto;
         }
         #selection-panel.active { display: block; }
         #selection-panel h3 { color: var(--cor-accent); margin-bottom: 10px; font-size: 14px; }
         #selection-panel p { margin: 4px 0; font-size: 12px; }
         #selection-panel .label { color: var(--cor-text-muted); }
         #selection-panel .value { color: var(--cor-text); }
-
-        /* Estilos para propriedades IFC expandíveis */
-        .ifc-properties {
-            margin-top: 12px;
-            border-top: 1px solid #555;
-            padding-top: 10px;
-        }
-        .ifc-properties h4 {
-            color: var(--cor-accent);
+        .btn-expand-props {
+            background: var(--cor-accent);
+            color: #000;
+            margin-top: 10px;
+            padding: 10px;
             font-size: 12px;
-            margin-bottom: 8px;
+            width: 100%;
         }
+        .btn-expand-props:hover { background: #FF8F00; }
+        #btn-clear-selection {
+            margin-top: 10px;
+            background: #c62828;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+        #btn-clear-selection:hover { background: #b71c1c; }
+
+        /* Modal/Drawer de Propriedades IFC */
+        #properties-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+        }
+        #properties-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .properties-modal-content {
+            background: var(--cor-sidebar);
+            width: 90%;
+            max-width: 600px;
+            max-height: 85vh;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        .properties-modal-header {
+            background: var(--cor-panel);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--cor-accent);
+        }
+        .properties-modal-header h3 {
+            color: var(--cor-accent);
+            font-size: 16px;
+            margin: 0;
+        }
+        .properties-modal-header .element-info {
+            font-size: 12px;
+            color: var(--cor-text-muted);
+            margin-top: 4px;
+        }
+        .properties-modal-header .element-info strong {
+            color: var(--cor-primaria);
+        }
+        .btn-close-modal {
+            background: #c62828;
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .btn-close-modal:hover {
+            background: #b71c1c;
+        }
+        .properties-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px 20px;
+        }
+        .properties-modal-footer {
+            padding: 10px 20px;
+            background: var(--cor-panel);
+            border-top: 1px solid #555;
+            display: flex;
+            gap: 10px;
+        }
+        .properties-modal-footer .btn {
+            flex: 1;
+            padding: 10px;
+        }
+        .btn-expand-all {
+            background: var(--cor-secundaria);
+        }
+        .btn-expand-all:hover {
+            background: #6D3410;
+        }
+        .btn-collapse-all {
+            background: #546E7A;
+        }
+        .btn-collapse-all:hover {
+            background: #37474F;
+        }
+
+        /* Estilos para propriedades IFC dentro do modal */
+        .properties-summary {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .summary-badge {
+            background: #2a2a2a;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .summary-badge.pset { border-left: 3px solid var(--cor-primaria); }
+        .summary-badge.qset { border-left: 3px solid #66BB6A; }
+        .summary-badge.type { border-left: 3px solid #AB47BC; }
+        .summary-badge span { font-weight: bold; }
+
         .property-set {
             background: #2a2a2a;
-            border-radius: 6px;
-            margin-bottom: 8px;
+            border-radius: 8px;
+            margin-bottom: 10px;
             overflow: hidden;
+            border: 1px solid #444;
         }
         .property-set-header {
             background: #383838;
-            padding: 8px 12px;
+            padding: 12px 15px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: bold;
             color: var(--cor-primaria);
             transition: background 0.2s;
@@ -228,13 +347,22 @@
         }
         .property-set-header .toggle-icon {
             transition: transform 0.2s;
+            font-size: 12px;
         }
         .property-set-header.expanded .toggle-icon {
             transform: rotate(90deg);
         }
+        .property-set-header .prop-count {
+            font-size: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 10px;
+            font-weight: normal;
+        }
         .property-set-content {
             display: none;
-            padding: 8px 12px;
+            padding: 0;
         }
         .property-set-content.expanded {
             display: block;
@@ -242,45 +370,93 @@
         .property-item {
             display: flex;
             justify-content: space-between;
-            padding: 4px 0;
-            font-size: 11px;
+            padding: 10px 15px;
+            font-size: 12px;
             border-bottom: 1px solid #333;
+            gap: 15px;
         }
         .property-item:last-child {
             border-bottom: none;
         }
+        .property-item:hover {
+            background: rgba(255,255,255,0.03);
+        }
         .property-name {
             color: var(--cor-text-muted);
             flex: 1;
+            word-break: break-word;
         }
         .property-value {
             color: var(--cor-text);
             flex: 1;
             text-align: right;
             font-weight: 500;
+            word-break: break-word;
         }
         .property-value.number {
             color: #4FC3F7;
+            font-family: 'Consolas', 'Monaco', monospace;
         }
         .property-set.type-property .property-set-header {
             color: #AB47BC;
+            border-left: 4px solid #AB47BC;
         }
         .property-set.quantity-set .property-set-header {
             color: #66BB6A;
+            border-left: 4px solid #66BB6A;
+        }
+        .property-set.property-set .property-set-header {
+            border-left: 4px solid var(--cor-primaria);
         }
         .loading-properties {
             text-align: center;
-            padding: 10px;
+            padding: 20px;
             color: var(--cor-text-muted);
+            font-size: 13px;
+        }
+        .no-properties {
+            text-align: center;
+            padding: 30px;
+            color: var(--cor-text-muted);
+        }
+        .no-properties .icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        /* Preview de propriedades no painel lateral */
+        .properties-preview {
+            margin-top: 10px;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 6px;
             font-size: 11px;
         }
-        #btn-clear-selection {
-            margin-top: 10px;
-            background: #c62828;
-            padding: 8px 12px;
-            font-size: 12px;
+        .properties-preview-title {
+            color: var(--cor-accent);
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        #btn-clear-selection:hover { background: #b71c1c; }
+        .properties-preview-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            border-bottom: 1px solid #333;
+        }
+        .properties-preview-item:last-child {
+            border-bottom: none;
+        }
+        .properties-preview-more {
+            text-align: center;
+            color: var(--cor-text-muted);
+            font-style: italic;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #444;
+        }
 
         .selection-actions {
             display: flex;
@@ -519,8 +695,72 @@
                 height: auto;
                 max-height: 40vh;
                 order: 2;
+                padding: 15px;
+                gap: 10px;
             }
             #viewer-container { order: 1; height: 60vh; }
+
+            /* Modal em tela cheia no mobile */
+            .properties-modal-content {
+                width: 100%;
+                max-width: 100%;
+                height: 100%;
+                max-height: 100%;
+                border-radius: 0;
+            }
+            .properties-modal-header {
+                padding: 12px 15px;
+            }
+            .properties-modal-header h3 {
+                font-size: 14px;
+            }
+            .properties-modal-body {
+                padding: 10px 15px;
+            }
+            .property-set-header {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+            .property-item {
+                padding: 8px 12px;
+                font-size: 11px;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .property-value {
+                text-align: left;
+            }
+            .properties-summary {
+                gap: 6px;
+            }
+            .summary-badge {
+                font-size: 10px;
+                padding: 4px 8px;
+            }
+            .btn {
+                padding: 10px 15px;
+                font-size: 13px;
+            }
+            .header-logos {
+                padding: 5px 0;
+            }
+            .logo-consorcio { height: 45px; }
+            .logo-unila { height: 35px; }
+            #sidebar h1 { font-size: 1.1em; }
+        }
+
+        @media (max-width: 480px) {
+            #sidebar {
+                max-height: 45vh;
+                padding: 10px;
+            }
+            #viewer-container { height: 55vh; }
+            .properties-modal-footer {
+                flex-direction: column;
+            }
+            .property-set-header .prop-count {
+                display: none;
+            }
         }
 
         .credits {
@@ -563,12 +803,11 @@
                 <p><span class="label">Nome:</span> <span class="value" id="sel-name">-</span></p>
                 <p><span class="label">Posição:</span> <span class="value" id="sel-position">-</span></p>
                 <p><span class="label">Dimensões:</span> <span class="value" id="sel-size">-</span></p>
-                <div id="ifc-properties-container" class="ifc-properties">
-                    <h4>📋 Propriedades IFC</h4>
-                    <div id="ifc-properties-list">
-                        <p class="loading-properties">Selecione um elemento...</p>
-                    </div>
+                <div id="properties-preview" class="properties-preview" style="display: none;">
+                    <div class="properties-preview-title">📋 Propriedades</div>
+                    <div id="properties-preview-content"></div>
                 </div>
+                <button id="btn-expand-props" class="btn btn-expand-props" style="display: none;">📋 Ver Todas as Propriedades</button>
                 <div class="selection-actions">
                     <button id="btn-hide-element" class="btn btn-hide">👁‍🗨 Ocultar</button>
                     <button id="btn-isolate-element" class="btn btn-isolate">🎯 Isolar</button>
@@ -650,6 +889,33 @@
                     <div class="progress-bar" id="progress-bar"></div>
                 </div>
                 <p class="progress-text" id="progress-text">0%</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Propriedades IFC -->
+    <div id="properties-modal">
+        <div class="properties-modal-content">
+            <div class="properties-modal-header">
+                <div>
+                    <h3>📋 Propriedades IFC</h3>
+                    <div class="element-info">
+                        <span id="modal-element-type">-</span> |
+                        <strong id="modal-element-name">-</strong>
+                        <span id="modal-element-id"></span>
+                    </div>
+                </div>
+                <button class="btn-close-modal" id="btn-close-modal">✕</button>
+            </div>
+            <div class="properties-modal-body">
+                <div class="properties-summary" id="properties-summary"></div>
+                <div id="properties-modal-list">
+                    <p class="loading-properties">Carregando propriedades...</p>
+                </div>
+            </div>
+            <div class="properties-modal-footer">
+                <button class="btn btn-expand-all" id="btn-expand-all">▼ Expandir Tudo</button>
+                <button class="btn btn-collapse-all" id="btn-collapse-all">▲ Recolher Tudo</button>
             </div>
         </div>
     </div>
@@ -1179,32 +1445,155 @@
             return result;
         }
 
-        // Renderizar propriedades no painel
-        function renderPropertiesPanel(allProps) {
-            const container = document.getElementById('ifc-properties-list');
-            container.innerHTML = '';
+        // Armazenar propriedades do elemento atual para o modal
+        let currentElementProps = null;
+        let currentElementInfo = { type: '-', name: '-', id: '' };
+
+        // Renderizar preview de propriedades no painel lateral
+        function renderPropertiesPreview(allProps) {
+            const preview = document.getElementById('properties-preview');
+            const previewContent = document.getElementById('properties-preview-content');
+            const btnExpand = document.getElementById('btn-expand-props');
+
+            currentElementProps = allProps;
 
             const totalSets = allProps.propertySets.length + allProps.quantitySets.length + allProps.typeProperties.length;
+            let totalProps = 0;
+
+            // Contar total de propriedades
+            allProps.propertySets.forEach(p => totalProps += p.properties.length);
+            allProps.quantitySets.forEach(p => totalProps += p.properties.length);
+            allProps.typeProperties.forEach(p => totalProps += p.properties.length);
 
             if (totalSets === 0) {
-                container.innerHTML = '<p class="loading-properties">Nenhuma propriedade encontrada</p>';
+                preview.style.display = 'none';
+                btnExpand.style.display = 'none';
                 return;
             }
 
-            // Renderizar PropertySets
-            for (const pset of allProps.propertySets) {
-                container.appendChild(createPropertySetElement(pset, 'property-set'));
-            }
+            // Mostrar preview com algumas propriedades
+            preview.style.display = 'block';
+            btnExpand.style.display = 'block';
+            btnExpand.textContent = `📋 Ver Todas as Propriedades (${totalProps})`;
 
-            // Renderizar QuantitySets (com destaque)
+            // Mostrar até 4 propriedades como preview
+            let previewHtml = '';
+            let count = 0;
+            const maxPreview = 4;
+
+            // Priorizar quantidades
             for (const qset of allProps.quantitySets) {
-                container.appendChild(createPropertySetElement(qset, 'quantity-set'));
+                for (const prop of qset.properties) {
+                    if (count >= maxPreview) break;
+                    const val = typeof prop.value === 'number'
+                        ? `${prop.value.toFixed(2)}${prop.unit ? ' ' + prop.unit : ''}`
+                        : (prop.value ?? '-');
+                    previewHtml += `<div class="properties-preview-item">
+                        <span class="property-name">${prop.name}</span>
+                        <span class="property-value${typeof prop.value === 'number' ? ' number' : ''}">${val}</span>
+                    </div>`;
+                    count++;
+                }
             }
 
-            // Renderizar Type Properties
-            for (const typeProp of allProps.typeProperties) {
-                container.appendChild(createPropertySetElement(typeProp, 'type-property'));
+            // Depois propriedades normais
+            for (const pset of allProps.propertySets) {
+                if (count >= maxPreview) break;
+                for (const prop of pset.properties) {
+                    if (count >= maxPreview) break;
+                    const val = typeof prop.value === 'number'
+                        ? `${prop.value.toFixed(2)}${prop.unit ? ' ' + prop.unit : ''}`
+                        : (prop.value ?? '-');
+                    previewHtml += `<div class="properties-preview-item">
+                        <span class="property-name">${prop.name}</span>
+                        <span class="property-value${typeof prop.value === 'number' ? ' number' : ''}">${val}</span>
+                    </div>`;
+                    count++;
+                }
             }
+
+            if (totalProps > maxPreview) {
+                previewHtml += `<div class="properties-preview-more">+ ${totalProps - maxPreview} propriedades...</div>`;
+            }
+
+            previewContent.innerHTML = previewHtml;
+        }
+
+        // Abrir modal de propriedades
+        function openPropertiesModal() {
+            if (!currentElementProps) return;
+
+            const modal = document.getElementById('properties-modal');
+            const modalList = document.getElementById('properties-modal-list');
+            const summary = document.getElementById('properties-summary');
+
+            // Atualizar info do elemento no header
+            document.getElementById('modal-element-type').textContent = currentElementInfo.type;
+            document.getElementById('modal-element-name').textContent = currentElementInfo.name;
+            document.getElementById('modal-element-id').textContent = currentElementInfo.id ? ` (${currentElementInfo.id})` : '';
+
+            // Criar resumo
+            const psetCount = currentElementProps.propertySets.length;
+            const qsetCount = currentElementProps.quantitySets.length;
+            const typeCount = currentElementProps.typeProperties.length;
+
+            let summaryHtml = '';
+            if (psetCount > 0) summaryHtml += `<div class="summary-badge pset"><span>${psetCount}</span> PropertySets</div>`;
+            if (qsetCount > 0) summaryHtml += `<div class="summary-badge qset"><span>${qsetCount}</span> Quantidades</div>`;
+            if (typeCount > 0) summaryHtml += `<div class="summary-badge type"><span>${typeCount}</span> Tipo</div>`;
+            summary.innerHTML = summaryHtml;
+
+            // Renderizar propriedades
+            modalList.innerHTML = '';
+
+            if (psetCount + qsetCount + typeCount === 0) {
+                modalList.innerHTML = `<div class="no-properties">
+                    <div class="icon">📭</div>
+                    <p>Nenhuma propriedade encontrada para este elemento</p>
+                </div>`;
+            } else {
+                // PropertySets
+                for (const pset of currentElementProps.propertySets) {
+                    modalList.appendChild(createPropertySetElement(pset, 'property-set'));
+                }
+
+                // QuantitySets
+                for (const qset of currentElementProps.quantitySets) {
+                    modalList.appendChild(createPropertySetElement(qset, 'quantity-set'));
+                }
+
+                // Type Properties
+                for (const typeProp of currentElementProps.typeProperties) {
+                    modalList.appendChild(createPropertySetElement(typeProp, 'type-property'));
+                }
+            }
+
+            modal.classList.add('active');
+        }
+
+        // Fechar modal
+        function closePropertiesModal() {
+            document.getElementById('properties-modal').classList.remove('active');
+        }
+
+        // Expandir todas as propriedades
+        function expandAllProperties() {
+            document.querySelectorAll('#properties-modal-list .property-set-header').forEach(h => {
+                h.classList.add('expanded');
+            });
+            document.querySelectorAll('#properties-modal-list .property-set-content').forEach(c => {
+                c.classList.add('expanded');
+            });
+        }
+
+        // Recolher todas as propriedades
+        function collapseAllProperties() {
+            document.querySelectorAll('#properties-modal-list .property-set-header').forEach(h => {
+                h.classList.remove('expanded');
+            });
+            document.querySelectorAll('#properties-modal-list .property-set-content').forEach(c => {
+                c.classList.remove('expanded');
+            });
         }
 
         // Criar elemento HTML para um PropertySet
@@ -1212,36 +1601,40 @@
             const div = document.createElement('div');
             div.className = `property-set ${className}`;
 
+            const propCount = pset.properties ? pset.properties.length : 0;
+
             const header = document.createElement('div');
             header.className = 'property-set-header';
             header.innerHTML = `
-                <span>${pset.name}</span>
+                <span>${pset.name} <span class="prop-count">${propCount} prop.</span></span>
                 <span class="toggle-icon">▶</span>
             `;
 
             const content = document.createElement('div');
             content.className = 'property-set-content';
 
-            for (const prop of pset.properties) {
-                const item = document.createElement('div');
-                item.className = 'property-item';
+            if (pset.properties) {
+                for (const prop of pset.properties) {
+                    const item = document.createElement('div');
+                    item.className = 'property-item';
 
-                let valueText = prop.value;
-                let valueClass = 'property-value';
+                    let valueText = prop.value;
+                    let valueClass = 'property-value';
 
-                if (typeof prop.value === 'number') {
-                    valueText = prop.value.toFixed(4);
-                    valueClass += ' number';
-                    if (prop.unit) {
-                        valueText += ` ${prop.unit}`;
+                    if (typeof prop.value === 'number') {
+                        valueText = prop.value.toFixed(4);
+                        valueClass += ' number';
+                        if (prop.unit) {
+                            valueText += ` ${prop.unit}`;
+                        }
                     }
-                }
 
-                item.innerHTML = `
-                    <span class="property-name">${prop.name}</span>
-                    <span class="${valueClass}">${valueText ?? '-'}</span>
-                `;
-                content.appendChild(item);
+                    item.innerHTML = `
+                        <span class="property-name">${prop.name}</span>
+                        <span class="${valueClass}">${valueText ?? '-'}</span>
+                    `;
+                    content.appendChild(item);
+                }
             }
 
             // Toggle expandir/colapsar
@@ -1556,7 +1949,8 @@
 
                 // Carregar propriedades IFC
                 if (expressID && currentModelID !== null) {
-                    document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Carregando propriedades...</p>';
+                    document.getElementById('properties-preview').style.display = 'none';
+                    document.getElementById('btn-expand-props').style.display = 'none';
 
                     try {
                         // Obter informações do elemento
@@ -1567,23 +1961,39 @@
                         document.getElementById('sel-ifc-type').textContent = ifcType;
                         document.getElementById('sel-name').textContent = elementName;
 
+                        // Armazenar informações do elemento para o modal
+                        currentElementInfo = {
+                            type: ifcType,
+                            name: elementName,
+                            id: `#${expressID}`
+                        };
+
                         // Obter todas as propriedades
                         const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
                         const allProps = getAllPropertiesForElement(expressID, WebIFC);
-                        renderPropertiesPanel(allProps);
+
+                        // Armazenar propriedades e renderizar preview
+                        currentElementProps = allProps;
+                        renderPropertiesPreview(allProps);
 
                         const totalProps = allProps.propertySets.length + allProps.quantitySets.length + allProps.typeProperties.length;
                         log(`Elemento #${expressID} (${ifcType}): ${totalProps} conjuntos de propriedades`, 'success');
                     } catch (e) {
                         document.getElementById('sel-ifc-type').textContent = '-';
                         document.getElementById('sel-name').textContent = '-';
-                        document.getElementById('ifc-properties-list').innerHTML = `<p class="loading-properties">Erro: ${e.message}</p>`;
+                        document.getElementById('properties-preview').innerHTML = `<p class="loading-properties">Erro: ${e.message}</p>`;
+                        document.getElementById('properties-preview').style.display = 'block';
+                        currentElementProps = null;
+                        currentElementInfo = { type: '-', name: '-', id: '' };
                         log(`Erro ao carregar propriedades: ${e.message}`, 'error');
                     }
                 } else {
                     document.getElementById('sel-ifc-type').textContent = '-';
                     document.getElementById('sel-name').textContent = '-';
-                    document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Propriedades não disponíveis</p>';
+                    document.getElementById('properties-preview').style.display = 'none';
+                    document.getElementById('btn-expand-props').style.display = 'none';
+                    currentElementProps = null;
+                    currentElementInfo = { type: '-', name: '-', id: '' };
                 }
 
                 log(`Elemento selecionado: ${expressID ? `#${expressID}` : `Mesh #${currentModel.children.indexOf(mesh)}`}`, 'success');
@@ -1601,7 +2011,13 @@
                 // Limpar propriedades
                 document.getElementById('sel-ifc-type').textContent = '-';
                 document.getElementById('sel-name').textContent = '-';
-                document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Selecione um elemento...</p>';
+                // Limpar preview e botão de expandir
+                document.getElementById('properties-preview').style.display = 'none';
+                document.getElementById('btn-expand-props').style.display = 'none';
+                currentElementProps = null;
+                currentElementInfo = { type: '-', name: '-', id: '' };
+                // Fechar modal se estiver aberto
+                closePropertiesModal();
                 if (logMessage) {
                     log('Seleção limpa', 'info');
                 }
@@ -1969,6 +2385,18 @@
         document.getElementById('btn-view-top').addEventListener('click', setViewTop);
         document.getElementById('btn-view-bottom').addEventListener('click', setViewBottom);
         document.getElementById('btn-view-iso').addEventListener('click', setViewIsometric);
+
+        // Event listeners do modal de propriedades
+        document.getElementById('btn-expand-props').addEventListener('click', openPropertiesModal);
+        document.getElementById('btn-close-modal').addEventListener('click', closePropertiesModal);
+        document.getElementById('btn-expand-all').addEventListener('click', expandAllProperties);
+        document.getElementById('btn-collapse-all').addEventListener('click', collapseAllProperties);
+        // Fechar modal ao clicar fora do conteúdo
+        document.getElementById('properties-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePropertiesModal();
+            }
+        });
 
         // Iniciar
         async function main() {
