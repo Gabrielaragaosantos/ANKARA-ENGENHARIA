@@ -455,6 +455,98 @@
             color: var(--cor-text-muted);
             font-style: italic;
         }
+
+        /* Painel de modelos carregados */
+        #models-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: none;
+            border-left: 3px solid var(--cor-accent);
+        }
+        #models-panel.active { display: block; }
+        #models-panel h4 {
+            color: var(--cor-accent);
+            margin-bottom: 10px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #models-panel h4 span {
+            background: var(--cor-primaria);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+        .model-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .model-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: #2a2a2a;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+        .model-item:last-child {
+            margin-bottom: 0;
+        }
+        .model-item .model-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 8px;
+        }
+        .model-item .model-info {
+            color: var(--cor-text-muted);
+            font-size: 10px;
+            margin-right: 8px;
+        }
+        .model-item .btn-remove-model {
+            background: #c62828;
+            border: none;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+        .model-item .btn-remove-model:hover {
+            background: #b71c1c;
+        }
+        .model-item .btn-toggle-visibility {
+            background: var(--cor-secundaria);
+            border: none;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-right: 4px;
+        }
+        .model-item .btn-toggle-visibility:hover {
+            background: #6D3410;
+        }
+        .model-item .btn-toggle-visibility.hidden {
+            background: #555;
+        }
+        #btn-clear-all-models {
+            width: 100%;
+            margin-top: 10px;
+            background: #c62828;
+            padding: 8px;
+            font-size: 12px;
+        }
+        #btn-clear-all-models:hover {
+            background: #b71c1c;
+        }
     </style>
 </head>
 <body>
@@ -466,8 +558,14 @@
             </div>
             <h1>🏗️ Visualizador IFC UNILA</h1>
             <p class="subtitle">Consórcio MPD/Ankara</p>
-            <label for="file-input" class="btn">📂 Carregar Arquivo IFC</label>
-            <input type="file" id="file-input" accept=".ifc">
+            <a href="index.html" class="btn" style="background: #546E7A; text-decoration: none; text-align: center;">⬅️ Voltar para Galeria</a>
+            <label for="file-input" class="btn">📂 Adicionar Arquivo IFC</label>
+            <input type="file" id="file-input" accept=".ifc" multiple>
+            <div id="models-panel">
+                <h4>📁 Modelos Carregados <span id="models-count">0</span></h4>
+                <div id="models-list" class="model-list"></div>
+                <button id="btn-clear-all-models" class="btn">🗑️ Limpar Todos os Modelos</button>
+            </div>
             <button id="btn-fit" class="btn btn-secondary" disabled>🎯 Enquadrar Modelo</button>
             <button id="btn-center-orbit" class="btn btn-secondary" disabled>🔄 Centralizar Órbita</button>
             <button id="btn-grid" class="btn btn-secondary">📐 Toggle Grid</button>
@@ -585,9 +683,13 @@
         // Variáveis globais
         let scene, camera, renderer, controls, gridHelper;
         let ifcAPI = null;
-        let currentModel = null;
+        let currentModel = null;  // Grupo principal que contém todos os modelos
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
+
+        // Lista de modelos carregados (para upload acumulativo)
+        let loadedModels = [];  // Array de { id, name, group, meshCount, visible }
+        let modelIdCounter = 0;
 
         // Seleção de elementos
         let selectedMesh = null;
@@ -717,7 +819,16 @@
             }
         }
 
-        // Carregar IFC
+        // Inicializar grupo principal de modelos
+        function initMainModelGroup() {
+            if (!currentModel) {
+                currentModel = new THREE.Group();
+                currentModel.name = 'MainModelGroup';
+                scene.add(currentModel);
+            }
+        }
+
+        // Carregar IFC (acumulativo)
         async function loadIFC(file) {
             if (!ifcAPI) {
                 alert('Motor IFC não inicializado. Recarregue a página.');
@@ -728,43 +839,11 @@
                 log(`Carregando: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
                 showLoading('Lendo arquivo...');
 
-                // Limpar modelo anterior
-                if (currentModel) {
-                    scene.remove(currentModel);
-                    currentModel.traverse((child) => {
-                        if (child.geometry) child.geometry.dispose();
-                        if (child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(m => m.dispose());
-                            } else {
-                                child.material.dispose();
-                            }
-                        }
-                    });
-                    currentModel = null;
-                }
+                // Garantir que o grupo principal existe
+                initMainModelGroup();
 
-                // Limpar estados
+                // Limpar seleção atual
                 clearSelection(false);
-                hiddenMeshes.clear();
-                updateHiddenCounter();
-                originalOpacities.clear();
-                globalOpacity = 1.0;
-                document.getElementById('transparency-slider').value = 100;
-                document.getElementById('transparency-value').textContent = '100%';
-
-                // Reset clipping
-                clippingEnabled = false;
-                clippingFlipped = false;
-                document.getElementById('btn-clip-toggle').textContent = '✂️ Ativar';
-                document.getElementById('btn-clip-toggle').classList.remove('active');
-                document.getElementById('clip-x').value = 100;
-                document.getElementById('clip-y').value = 100;
-                document.getElementById('clip-z').value = 100;
-
-                // Reset medição
-                clearMeasurement();
-                if (measureMode) toggleMeasureMode();
 
                 const data = new Uint8Array(await file.arrayBuffer());
                 log(`Arquivo lido: ${data.length} bytes`, 'info');
@@ -776,7 +855,9 @@
 
                 showLoading('Gerando geometrias...');
 
+                // Criar grupo para este modelo específico
                 const modelGroup = new THREE.Group();
+                modelGroup.name = file.name;
                 let meshCount = 0;
 
                 ifcAPI.StreamAllMeshes(modelID, (mesh) => {
@@ -824,26 +905,29 @@
                     }
                 });
 
-                log(`Gerados ${meshCount} meshes`, 'success');
+                log(`Gerados ${meshCount} meshes para ${file.name}`, 'success');
 
-                scene.add(modelGroup);
-                currentModel = modelGroup;
+                // Adicionar ao grupo principal
+                currentModel.add(modelGroup);
 
-                const box = new THREE.Box3().setFromObject(modelGroup);
-                const center = new THREE.Vector3();
-                const size = new THREE.Vector3();
-                box.getCenter(center);
-                box.getSize(size);
+                // Registrar na lista de modelos carregados
+                const modelInfo = {
+                    id: ++modelIdCounter,
+                    name: file.name,
+                    group: modelGroup,
+                    meshCount: meshCount,
+                    visible: true
+                };
+                loadedModels.push(modelInfo);
 
-                const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
-                controls.target.copy(center);
-                controls.update();
+                // Atualizar interface
+                updateModelsPanel();
+                updateInfoPanel();
 
-                document.getElementById('info-panel').classList.add('active');
-                document.getElementById('info-name').textContent = `Arquivo: ${file.name}`;
-                document.getElementById('info-elements').textContent = `Elementos: ${meshCount}`;
-                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
+                // Enquadrar todos os modelos
+                fitAllModels();
+
+                // Habilitar controles
                 document.getElementById('btn-fit').disabled = false;
                 document.getElementById('btn-center-orbit').disabled = false;
                 document.getElementById('orbit-hint').style.display = 'block';
@@ -853,9 +937,19 @@
                 document.getElementById('views-panel').classList.add('active');
                 updateModelBounds();
 
+                // Aplicar clipping se estiver ativo
+                if (clippingEnabled) {
+                    applyClippingToModel();
+                }
+
+                // Aplicar transparência global se não for 100%
+                if (globalOpacity < 1.0) {
+                    setModelTransparency(globalOpacity);
+                }
+
                 ifcAPI.CloseModel(modelID);
                 hideLoading();
-                log('Modelo carregado com sucesso!', 'success');
+                log(`✅ ${file.name} adicionado com sucesso!`, 'success');
 
             } catch (error) {
                 log(`ERRO: ${error.message}`, 'error');
@@ -865,18 +959,225 @@
             }
         }
 
-        function fitModel() {
-            if (!currentModel) return;
+        // Atualizar painel de modelos carregados
+        function updateModelsPanel() {
+            const panel = document.getElementById('models-panel');
+            const list = document.getElementById('models-list');
+            const count = document.getElementById('models-count');
+
+            if (loadedModels.length === 0) {
+                panel.classList.remove('active');
+                return;
+            }
+
+            panel.classList.add('active');
+            count.textContent = loadedModels.length;
+
+            list.innerHTML = '';
+            for (const model of loadedModels) {
+                const item = document.createElement('div');
+                item.className = 'model-item';
+                item.innerHTML = `
+                    <span class="model-name" title="${model.name}">${model.name}</span>
+                    <span class="model-info">${model.meshCount} elem.</span>
+                    <button class="btn-toggle-visibility ${model.visible ? '' : 'hidden'}" data-id="${model.id}" title="${model.visible ? 'Ocultar' : 'Mostrar'}">
+                        ${model.visible ? '👁' : '👁‍🗨'}
+                    </button>
+                    <button class="btn-remove-model" data-id="${model.id}" title="Remover">✕</button>
+                `;
+                list.appendChild(item);
+            }
+
+            // Event listeners para botões
+            list.querySelectorAll('.btn-toggle-visibility').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    toggleModelVisibility(id);
+                });
+            });
+
+            list.querySelectorAll('.btn-remove-model').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    removeModel(id);
+                });
+            });
+        }
+
+        // Atualizar painel de informações
+        function updateInfoPanel() {
+            const totalMeshes = loadedModels.reduce((sum, m) => sum + m.meshCount, 0);
+            const modelNames = loadedModels.map(m => m.name).join(', ');
+
+            document.getElementById('info-panel').classList.add('active');
+            document.getElementById('info-name').textContent = loadedModels.length === 1
+                ? `Arquivo: ${loadedModels[0].name}`
+                : `Arquivos: ${loadedModels.length} modelos`;
+            document.getElementById('info-elements').textContent = `Elementos: ${totalMeshes}`;
+
+            if (currentModel && loadedModels.length > 0) {
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
+            }
+        }
+
+        // Alternar visibilidade de um modelo
+        function toggleModelVisibility(id) {
+            const model = loadedModels.find(m => m.id === id);
+            if (model) {
+                model.visible = !model.visible;
+                model.group.visible = model.visible;
+                updateModelsPanel();
+                log(`${model.name}: ${model.visible ? 'visível' : 'oculto'}`, 'info');
+            }
+        }
+
+        // Remover um modelo específico
+        function removeModel(id) {
+            const index = loadedModels.findIndex(m => m.id === id);
+            if (index === -1) return;
+
+            const model = loadedModels[index];
+
+            // Limpar seleção se o elemento selecionado pertence a este modelo
+            if (selectedMesh && model.group.children.includes(selectedMesh)) {
+                clearSelection(false);
+            }
+
+            // Remover meshes ocultos deste modelo
+            model.group.traverse((child) => {
+                if (hiddenMeshes.has(child)) {
+                    hiddenMeshes.delete(child);
+                }
+                if (originalOpacities.has(child)) {
+                    originalOpacities.delete(child);
+                }
+            });
+
+            // Remover da cena
+            currentModel.remove(model.group);
+
+            // Limpar geometrias e materiais
+            model.group.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => m.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
+
+            // Remover da lista
+            loadedModels.splice(index, 1);
+
+            log(`${model.name} removido`, 'info');
+
+            // Atualizar interface
+            updateModelsPanel();
+            updateInfoPanel();
+            updateHiddenCounter();
+            updateModelBounds();
+
+            // Se não há mais modelos, desabilitar controles
+            if (loadedModels.length === 0) {
+                document.getElementById('btn-fit').disabled = true;
+                document.getElementById('btn-center-orbit').disabled = true;
+                document.getElementById('orbit-hint').style.display = 'none';
+                document.getElementById('info-panel').classList.remove('active');
+                document.getElementById('transparency-panel').classList.remove('active');
+                document.getElementById('clipping-panel').classList.remove('active');
+                document.getElementById('measure-panel').classList.remove('active');
+                document.getElementById('views-panel').classList.remove('active');
+            } else {
+                fitAllModels();
+            }
+        }
+
+        // Limpar todos os modelos
+        function clearAllModels() {
+            if (loadedModels.length === 0) return;
+
+            if (!confirm(`Deseja remover todos os ${loadedModels.length} modelos carregados?`)) {
+                return;
+            }
+
+            // Limpar seleção
+            clearSelection(false);
+
+            // Remover todos os modelos
+            for (const model of loadedModels) {
+                currentModel.remove(model.group);
+                model.group.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                });
+            }
+
+            // Limpar estados
+            loadedModels = [];
+            hiddenMeshes.clear();
+            originalOpacities.clear();
+            globalOpacity = 1.0;
+
+            // Reset UI
+            document.getElementById('transparency-slider').value = 100;
+            document.getElementById('transparency-value').textContent = '100%';
+            clippingEnabled = false;
+            clippingFlipped = false;
+            document.getElementById('btn-clip-toggle').textContent = '✂️ Ativar';
+            document.getElementById('btn-clip-toggle').classList.remove('active');
+            document.getElementById('clip-x').value = 100;
+            document.getElementById('clip-y').value = 100;
+            document.getElementById('clip-z').value = 100;
+            clearMeasurement();
+            if (measureMode) toggleMeasureMode();
+
+            // Desabilitar controles
+            document.getElementById('btn-fit').disabled = true;
+            document.getElementById('btn-center-orbit').disabled = true;
+            document.getElementById('orbit-hint').style.display = 'none';
+            document.getElementById('info-panel').classList.remove('active');
+            document.getElementById('transparency-panel').classList.remove('active');
+            document.getElementById('clipping-panel').classList.remove('active');
+            document.getElementById('measure-panel').classList.remove('active');
+            document.getElementById('views-panel').classList.remove('active');
+
+            updateModelsPanel();
+            updateHiddenCounter();
+
+            log('Todos os modelos foram removidos', 'success');
+        }
+
+        // Enquadrar todos os modelos
+        function fitAllModels() {
+            if (!currentModel || loadedModels.length === 0) return;
+
             const box = new THREE.Box3().setFromObject(currentModel);
             const center = new THREE.Vector3();
             const size = new THREE.Vector3();
             box.getCenter(center);
             box.getSize(size);
+
             const maxDim = Math.max(size.x, size.y, size.z);
             camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
             controls.target.copy(center);
             controls.update();
-            log('Modelo enquadrado', 'info');
+        }
+
+        function fitModel() {
+            if (!currentModel || loadedModels.length === 0) return;
+            fitAllModels();
+            log('Modelos enquadrados', 'info');
         }
 
         let gridVisible = true;
@@ -888,7 +1189,7 @@
 
         // Centralizar órbita no ponto clicado
         function setOrbitCenter(event) {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             const container = document.getElementById('viewer-container');
             const rect = container.getBoundingClientRect();
@@ -937,7 +1238,7 @@
 
         // Centralizar órbita no centro do modelo
         function centerOrbitOnModel() {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
             const box = new THREE.Box3().setFromObject(currentModel);
             const center = new THREE.Vector3();
             box.getCenter(center);
@@ -970,7 +1271,7 @@
                 return;
             }
 
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             const container = document.getElementById('viewer-container');
             const rect = container.getBoundingClientRect();
@@ -1065,7 +1366,7 @@
 
         // Isolar elemento selecionado (ocultar todos os outros)
         function isolateSelectedElement() {
-            if (!selectedMesh || !currentModel) return;
+            if (!selectedMesh || !currentModel || loadedModels.length === 0) return;
 
             const meshToIsolate = selectedMesh;
 
@@ -1074,15 +1375,15 @@
                 meshToIsolate.material = originalMaterial;
             }
 
-            // Ocultar todos os outros elementos
-            currentModel.children.forEach(child => {
-                if (child !== meshToIsolate && child.visible) {
+            // Ocultar todos os outros elementos (percorrer todos os modelos)
+            currentModel.traverse((child) => {
+                if (child.isMesh && child !== meshToIsolate && child.visible) {
                     child.visible = false;
                     hiddenMeshes.add(child);
                 }
             });
 
-            log(`Elemento isolado: Mesh #${currentModel.children.indexOf(meshToIsolate)}`, 'success');
+            log(`Elemento isolado`, 'success');
 
             // Limpar seleção
             selectedMesh = null;
@@ -1105,7 +1406,7 @@
 
         // Mostrar todos os elementos
         function showAllElements() {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             hiddenMeshes.forEach(mesh => {
                 mesh.visible = true;
@@ -1120,21 +1421,22 @@
 
         // Aplicar transparência ao modelo
         function setModelTransparency(opacity) {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             globalOpacity = opacity;
 
-            currentModel.children.forEach(mesh => {
-                if (mesh.material && mesh !== selectedMesh) {
+            // Percorrer todos os modelos carregados
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material && child !== selectedMesh) {
                     // Guardar opacidade original se ainda não foi guardada
-                    if (!originalOpacities.has(mesh)) {
-                        originalOpacities.set(mesh, mesh.material.opacity);
+                    if (!originalOpacities.has(child)) {
+                        originalOpacities.set(child, child.material.opacity);
                     }
 
-                    const originalOpacity = originalOpacities.get(mesh);
-                    mesh.material.opacity = originalOpacity * opacity;
-                    mesh.material.transparent = opacity < 1 || originalOpacity < 1;
-                    mesh.material.needsUpdate = true;
+                    const originalOpacity = originalOpacities.get(child);
+                    child.material.opacity = originalOpacity * opacity;
+                    child.material.transparent = opacity < 1 || originalOpacity < 1;
+                    child.material.needsUpdate = true;
                 }
             });
         }
@@ -1149,7 +1451,7 @@
 
         // Atualizar limites do modelo para clipping
         function updateModelBounds() {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
             const box = new THREE.Box3().setFromObject(currentModel);
             modelBounds.min.copy(box.min);
             modelBounds.max.copy(box.max);
@@ -1175,30 +1477,32 @@
 
         // Aplicar clipping ao modelo
         function applyClippingToModel() {
-            if (!currentModel) return;
-            currentModel.children.forEach(mesh => {
-                if (mesh.material) {
-                    mesh.material.clippingPlanes = [clippingPlane];
-                    mesh.material.clipShadows = true;
-                    mesh.material.needsUpdate = true;
+            if (!currentModel || loadedModels.length === 0) return;
+            // Percorrer todos os meshes de todos os modelos
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    child.material.clippingPlanes = [clippingPlane];
+                    child.material.clipShadows = true;
+                    child.material.needsUpdate = true;
                 }
             });
         }
 
         // Remover clipping do modelo
         function removeClippingFromModel() {
-            if (!currentModel) return;
-            currentModel.children.forEach(mesh => {
-                if (mesh.material) {
-                    mesh.material.clippingPlanes = [];
-                    mesh.material.needsUpdate = true;
+            if (!currentModel || loadedModels.length === 0) return;
+            // Percorrer todos os meshes de todos os modelos
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    child.material.clippingPlanes = [];
+                    child.material.needsUpdate = true;
                 }
             });
         }
 
         // Atualizar posição do plano de corte
         function updateClippingPlane(axis, value) {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             currentClipAxis = axis;
             const range = modelBounds.max[axis] - modelBounds.min[axis];
@@ -1347,7 +1651,7 @@
 
         // Handler de clique para medição
         function handleMeasureClick(event) {
-            if (!measureMode || !currentModel) return;
+            if (!measureMode || !currentModel || loadedModels.length === 0) return;
 
             const container = document.getElementById('viewer-container');
             const rect = container.getBoundingClientRect();
@@ -1365,7 +1669,7 @@
 
         // Função genérica para animar câmera para uma vista
         function animateToView(targetPosition, targetLookAt, viewName) {
-            if (!currentModel) return;
+            if (!currentModel || loadedModels.length === 0) return;
 
             const box = new THREE.Box3().setFromObject(currentModel);
             const center = new THREE.Vector3();
@@ -1433,15 +1737,21 @@
         }
 
         // Event listeners
-        document.getElementById('file-input').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                log(`Selecionado: ${file.name}`, 'info');
-                loadIFC(file);
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                log(`Selecionados: ${files.length} arquivo(s)`, 'info');
+                // Carregar cada arquivo sequencialmente
+                for (const file of files) {
+                    await loadIFC(file);
+                }
+                // Limpar o input para permitir selecionar o mesmo arquivo novamente
+                e.target.value = '';
             }
         });
         document.getElementById('btn-fit').addEventListener('click', fitModel);
         document.getElementById('btn-center-orbit').addEventListener('click', centerOrbitOnModel);
+        document.getElementById('btn-clear-all-models').addEventListener('click', clearAllModels);
         document.getElementById('btn-grid').addEventListener('click', toggleGrid);
 
         // Duplo clique para centralizar órbita

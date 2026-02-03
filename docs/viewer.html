@@ -185,12 +185,95 @@
             border-radius: 8px;
             display: none;
             border-left: 3px solid var(--cor-accent);
+            max-height: 60vh;
+            overflow-y: auto;
         }
         #selection-panel.active { display: block; }
         #selection-panel h3 { color: var(--cor-accent); margin-bottom: 10px; font-size: 14px; }
         #selection-panel p { margin: 4px 0; font-size: 12px; }
         #selection-panel .label { color: var(--cor-text-muted); }
         #selection-panel .value { color: var(--cor-text); }
+
+        /* Estilos para propriedades IFC expandíveis */
+        .ifc-properties {
+            margin-top: 12px;
+            border-top: 1px solid #555;
+            padding-top: 10px;
+        }
+        .ifc-properties h4 {
+            color: var(--cor-accent);
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .property-set {
+            background: #2a2a2a;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        .property-set-header {
+            background: #383838;
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--cor-primaria);
+            transition: background 0.2s;
+        }
+        .property-set-header:hover {
+            background: #444;
+        }
+        .property-set-header .toggle-icon {
+            transition: transform 0.2s;
+        }
+        .property-set-header.expanded .toggle-icon {
+            transform: rotate(90deg);
+        }
+        .property-set-content {
+            display: none;
+            padding: 8px 12px;
+        }
+        .property-set-content.expanded {
+            display: block;
+        }
+        .property-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 11px;
+            border-bottom: 1px solid #333;
+        }
+        .property-item:last-child {
+            border-bottom: none;
+        }
+        .property-name {
+            color: var(--cor-text-muted);
+            flex: 1;
+        }
+        .property-value {
+            color: var(--cor-text);
+            flex: 1;
+            text-align: right;
+            font-weight: 500;
+        }
+        .property-value.number {
+            color: #4FC3F7;
+        }
+        .property-set.type-property .property-set-header {
+            color: #AB47BC;
+        }
+        .property-set.quantity-set .property-set-header {
+            color: #66BB6A;
+        }
+        .loading-properties {
+            text-align: center;
+            padding: 10px;
+            color: var(--cor-text-muted);
+            font-size: 11px;
+        }
         #btn-clear-selection {
             margin-top: 10px;
             background: #c62828;
@@ -476,8 +559,16 @@
             <div id="selection-panel">
                 <h3>🎯 Elemento Selecionado</h3>
                 <p><span class="label">ID:</span> <span class="value" id="sel-id">-</span></p>
+                <p><span class="label">Tipo IFC:</span> <span class="value" id="sel-ifc-type">-</span></p>
+                <p><span class="label">Nome:</span> <span class="value" id="sel-name">-</span></p>
                 <p><span class="label">Posição:</span> <span class="value" id="sel-position">-</span></p>
                 <p><span class="label">Dimensões:</span> <span class="value" id="sel-size">-</span></p>
+                <div id="ifc-properties-container" class="ifc-properties">
+                    <h4>📋 Propriedades IFC</h4>
+                    <div id="ifc-properties-list">
+                        <p class="loading-properties">Selecione um elemento...</p>
+                    </div>
+                </div>
                 <div class="selection-actions">
                     <button id="btn-hide-element" class="btn btn-hide">👁‍🗨 Ocultar</button>
                     <button id="btn-isolate-element" class="btn btn-isolate">🎯 Isolar</button>
@@ -580,9 +671,17 @@
         let scene, camera, renderer, controls, gridHelper;
         let ifcAPI = null;
         let currentModel = null;
+        let currentModelID = null;
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
         let modelName = 'Modelo';
+
+        // Mapas de propriedades IFC (para extração completa como Navisworks)
+        let elementToPropertySets = new Map();
+        let elementToQuantitySets = new Map();
+        let elementToTypeProperties = new Map();
+        let typeToPropertySets = new Map();
+        let meshToExpressID = new Map();  // Mapeia mesh -> expressID do elemento IFC
 
         // Seleção de elementos
         let selectedMesh = null;
@@ -727,6 +826,436 @@
         // Proxy Cloudflare para evitar CORS
         const CORS_PROXY = 'https://ifc-proxy.gabrielsoudier.workers.dev/?url=';
 
+        // ============================================
+        // SISTEMA DE EXTRAÇÃO DE PROPRIEDADES IFC
+        // (Extrai TODAS as propriedades como Navisworks)
+        // ============================================
+
+        // Nomes de tipos IFC
+        const IFC_TYPE_NAMES = {
+            3821786052: 'IFCPROJECT',
+            2979338954: 'IFCBUILDING',
+            4031249490: 'IFCSITE',
+            3124254112: 'IFCBUILDINGSTOREY',
+            3027567501: 'IFCREINFORCINGBAR',
+            2391406946: 'IFCWALL',
+            3512223829: 'IFCWALLSTANDARDCASE',
+            1281925730: 'IFCSLAB',
+            4186316022: 'IFCCOLUMN',
+            1687234759: 'IFCBEAM',
+            3171933400: 'IFCPLATE',
+            1973544240: 'IFCMEMBER',
+            3304561284: 'IFCWINDOW',
+            395920057: 'IFCDOOR',
+            4278956645: 'IFCROOF',
+            2188021234: 'IFCSTAIR',
+            160246688: 'IFCBUILDINGELEMENTPROXY',
+            2315554128: 'IFCFOOTING',
+            1095909175: 'IFCSPACE',
+            1335981549: 'IFCFURNISHINGELEMENT',
+            2272882330: 'IFCRAILING'
+        };
+
+        function getIFCTypeName(typeCode) {
+            return IFC_TYPE_NAMES[typeCode] || `IFC_TYPE_${typeCode}`;
+        }
+
+        // Extrair valor de uma propriedade IFC
+        function extractPropertyValue(prop, WebIFC) {
+            if (!prop) return null;
+
+            let property = prop;
+            if (prop.value !== undefined && typeof prop.value === 'number') {
+                try {
+                    property = ifcAPI.GetLine(currentModelID, prop.value, true);
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            if (!property) return null;
+
+            const result = {
+                name: property.Name?.value || property.Name || '',
+                type: property.type
+            };
+
+            // IFCPROPERTYSINGLEVALUE
+            if (property.NominalValue !== undefined) {
+                let val = property.NominalValue;
+                if (val && typeof val === 'object') {
+                    result.value = val.value ?? val;
+                } else {
+                    result.value = val;
+                }
+                result.unit = property.Unit?.value || property.Unit || null;
+            }
+
+            // IFCPROPERTYENUMERATEDVALUE
+            if (property.EnumerationValues && Array.isArray(property.EnumerationValues)) {
+                result.value = property.EnumerationValues.map(v => v?.value ?? v).join(', ');
+            }
+
+            // IFCPROPERTYBOUNDEDVALUE
+            if (property.UpperBoundValue !== undefined || property.LowerBoundValue !== undefined) {
+                const upper = property.UpperBoundValue?.value ?? property.UpperBoundValue;
+                const lower = property.LowerBoundValue?.value ?? property.LowerBoundValue;
+                result.value = `${lower ?? '-'} ~ ${upper ?? '-'}`;
+            }
+
+            // IFCPROPERTYLISTVALUE
+            if (property.ListValues && Array.isArray(property.ListValues)) {
+                result.value = property.ListValues.map(v => v?.value ?? v).join(', ');
+            }
+
+            return result;
+        }
+
+        // Extrair valor de uma quantidade IFC
+        function extractQuantityValue(qty, WebIFC) {
+            if (!qty) return null;
+
+            let quantity = qty;
+            if (qty.value !== undefined && typeof qty.value === 'number') {
+                try {
+                    quantity = ifcAPI.GetLine(currentModelID, qty.value, true);
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            if (!quantity) return null;
+
+            const result = {
+                name: quantity.Name?.value || quantity.Name || '',
+                type: quantity.type,
+                description: quantity.Description?.value || quantity.Description || ''
+            };
+
+            // Determinar tipo de quantidade e valor
+            if (quantity.LengthValue !== undefined) {
+                result.value = quantity.LengthValue?.value ?? quantity.LengthValue;
+                result.quantityType = 'Comprimento';
+                result.unit = 'm';
+            } else if (quantity.AreaValue !== undefined) {
+                result.value = quantity.AreaValue?.value ?? quantity.AreaValue;
+                result.quantityType = 'Área';
+                result.unit = 'm²';
+            } else if (quantity.VolumeValue !== undefined) {
+                result.value = quantity.VolumeValue?.value ?? quantity.VolumeValue;
+                result.quantityType = 'Volume';
+                result.unit = 'm³';
+            } else if (quantity.CountValue !== undefined) {
+                result.value = quantity.CountValue?.value ?? quantity.CountValue;
+                result.quantityType = 'Contagem';
+                result.unit = '';
+            } else if (quantity.WeightValue !== undefined) {
+                result.value = quantity.WeightValue?.value ?? quantity.WeightValue;
+                result.quantityType = 'Peso';
+                result.unit = 'kg';
+            } else if (quantity.TimeValue !== undefined) {
+                result.value = quantity.TimeValue?.value ?? quantity.TimeValue;
+                result.quantityType = 'Tempo';
+                result.unit = 's';
+            }
+
+            return result;
+        }
+
+        // Extrair dados de um PropertySet
+        function extractPropertySetData(psetRef, WebIFC) {
+            let pset = psetRef;
+
+            if (psetRef?.value !== undefined) {
+                try {
+                    pset = ifcAPI.GetLine(currentModelID, psetRef.value, true);
+                } catch (e) {
+                    return null;
+                }
+            } else if (typeof psetRef === 'number') {
+                try {
+                    pset = ifcAPI.GetLine(currentModelID, psetRef, true);
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            if (!pset) return null;
+
+            const result = {
+                expressID: pset.expressID,
+                type: pset.type,
+                name: pset.Name?.value || pset.Name || 'Sem nome',
+                description: pset.Description?.value || pset.Description || '',
+                properties: []
+            };
+
+            // IFCPROPERTYSET - HasProperties
+            if (pset.HasProperties && Array.isArray(pset.HasProperties)) {
+                for (const prop of pset.HasProperties) {
+                    const propData = extractPropertyValue(prop, WebIFC);
+                    if (propData && propData.name) {
+                        result.properties.push(propData);
+                    }
+                }
+            }
+
+            // IFCELEMENTQUANTITY - Quantities
+            if (pset.Quantities && Array.isArray(pset.Quantities)) {
+                result.isQuantitySet = true;
+                for (const qty of pset.Quantities) {
+                    const qtyData = extractQuantityValue(qty, WebIFC);
+                    if (qtyData && qtyData.name) {
+                        result.properties.push(qtyData);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Construir mapa de propriedades iterando TODAS as relações
+        async function buildPropertyMaps(WebIFC) {
+            log('Construindo mapa de propriedades IFC...', 'info');
+
+            // Limpar mapas anteriores
+            elementToPropertySets.clear();
+            elementToQuantitySets.clear();
+            elementToTypeProperties.clear();
+            typeToPropertySets.clear();
+
+            // 1. Iterar IFCRELDEFINESBYPROPERTIES
+            try {
+                const relDefinesByPropsIDs = ifcAPI.GetLineIDsWithType(currentModelID, WebIFC.IFCRELDEFINESBYPROPERTIES);
+                log(`Encontradas ${relDefinesByPropsIDs.size()} relações IFCRELDEFINESBYPROPERTIES`, 'info');
+
+                for (let i = 0; i < relDefinesByPropsIDs.size(); i++) {
+                    const relID = relDefinesByPropsIDs.get(i);
+                    try {
+                        const rel = ifcAPI.GetLine(currentModelID, relID, true);
+                        if (!rel) continue;
+
+                        const propertyDef = rel.RelatingPropertyDefinition;
+                        if (!propertyDef) continue;
+
+                        const relatedObjects = rel.RelatedObjects;
+                        if (!relatedObjects || !Array.isArray(relatedObjects)) continue;
+
+                        const psetData = extractPropertySetData(propertyDef, WebIFC);
+                        if (!psetData || psetData.properties.length === 0) continue;
+
+                        for (const obj of relatedObjects) {
+                            const elementID = obj.value || obj.expressID || obj;
+
+                            if (psetData.isQuantitySet) {
+                                if (!elementToQuantitySets.has(elementID)) {
+                                    elementToQuantitySets.set(elementID, []);
+                                }
+                                elementToQuantitySets.get(elementID).push(psetData);
+                            } else {
+                                if (!elementToPropertySets.has(elementID)) {
+                                    elementToPropertySets.set(elementID, []);
+                                }
+                                elementToPropertySets.get(elementID).push(psetData);
+                            }
+                        }
+                    } catch (e) {
+                        // Ignorar erros em relações individuais
+                    }
+                }
+            } catch (e) {
+                log(`Erro ao processar IFCRELDEFINESBYPROPERTIES: ${e.message}`, 'warning');
+            }
+
+            // 2. Iterar IFCRELDEFINESBYTYPE para propriedades de tipo
+            try {
+                const relDefinesByTypeIDs = ifcAPI.GetLineIDsWithType(currentModelID, WebIFC.IFCRELDEFINESBYTYPE);
+                log(`Encontradas ${relDefinesByTypeIDs.size()} relações IFCRELDEFINESBYTYPE`, 'info');
+
+                for (let i = 0; i < relDefinesByTypeIDs.size(); i++) {
+                    const relID = relDefinesByTypeIDs.get(i);
+                    try {
+                        const rel = ifcAPI.GetLine(currentModelID, relID, true);
+                        if (!rel) continue;
+
+                        const relatingType = rel.RelatingType;
+                        const relatedObjects = rel.RelatedObjects;
+
+                        if (!relatingType || !relatedObjects) continue;
+
+                        const typeID = relatingType.value || relatingType.expressID || relatingType;
+
+                        // Obter informações do tipo
+                        let typeObj = relatingType;
+                        if (typeof typeID === 'number') {
+                            try {
+                                typeObj = ifcAPI.GetLine(currentModelID, typeID, true);
+                            } catch (e) {}
+                        }
+
+                        const typeName = typeObj?.Name?.value || typeObj?.Name || getIFCTypeName(typeObj?.type);
+
+                        // Processar HasPropertySets do tipo
+                        const typePsets = [];
+                        if (typeObj?.HasPropertySets && Array.isArray(typeObj.HasPropertySets)) {
+                            for (const pset of typeObj.HasPropertySets) {
+                                const psetData = extractPropertySetData(pset, WebIFC);
+                                if (psetData && psetData.properties.length > 0) {
+                                    psetData.isTypeProperty = true;
+                                    psetData.name = `${psetData.name} (IFC Type)`;
+                                    typePsets.push(psetData);
+                                }
+                            }
+                        }
+
+                        // Mapear elementos ao tipo
+                        for (const obj of relatedObjects) {
+                            const elementID = obj.value || obj.expressID || obj;
+
+                            if (!elementToTypeProperties.has(elementID)) {
+                                elementToTypeProperties.set(elementID, []);
+                            }
+
+                            // Adicionar info do tipo
+                            elementToTypeProperties.get(elementID).push({
+                                typeID: typeID,
+                                typeName: typeName,
+                                psets: typePsets
+                            });
+                        }
+                    } catch (e) {
+                        // Ignorar erros em relações individuais
+                    }
+                }
+            } catch (e) {
+                log(`Erro ao processar IFCRELDEFINESBYTYPE: ${e.message}`, 'warning');
+            }
+
+            const totalPsets = elementToPropertySets.size + elementToQuantitySets.size;
+            log(`Mapa de propriedades construído: ${totalPsets} elementos com propriedades`, 'success');
+        }
+
+        // Obter todas as propriedades de um elemento
+        function getAllPropertiesForElement(expressID, WebIFC) {
+            const result = {
+                expressID: expressID,
+                element: null,
+                propertySets: [],
+                quantitySets: [],
+                typeProperties: []
+            };
+
+            // Obter dados do elemento
+            try {
+                result.element = ifcAPI.GetLine(currentModelID, expressID, true);
+            } catch (e) {}
+
+            // Propriedades diretas (PropertySets)
+            if (elementToPropertySets.has(expressID)) {
+                result.propertySets = elementToPropertySets.get(expressID);
+            }
+
+            // Quantidades (QuantitySets)
+            if (elementToQuantitySets.has(expressID)) {
+                result.quantitySets = elementToQuantitySets.get(expressID);
+            }
+
+            // Propriedades de Tipo
+            if (elementToTypeProperties.has(expressID)) {
+                const typeInfos = elementToTypeProperties.get(expressID);
+                for (const typeInfo of typeInfos) {
+                    // Adicionar identificação do tipo
+                    result.typeProperties.push({
+                        name: 'Tipo IFC',
+                        properties: [{ name: 'Nome do Tipo', value: typeInfo.typeName }]
+                    });
+                    // Adicionar PropertySets do tipo
+                    for (const pset of typeInfo.psets) {
+                        result.typeProperties.push(pset);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Renderizar propriedades no painel
+        function renderPropertiesPanel(allProps) {
+            const container = document.getElementById('ifc-properties-list');
+            container.innerHTML = '';
+
+            const totalSets = allProps.propertySets.length + allProps.quantitySets.length + allProps.typeProperties.length;
+
+            if (totalSets === 0) {
+                container.innerHTML = '<p class="loading-properties">Nenhuma propriedade encontrada</p>';
+                return;
+            }
+
+            // Renderizar PropertySets
+            for (const pset of allProps.propertySets) {
+                container.appendChild(createPropertySetElement(pset, 'property-set'));
+            }
+
+            // Renderizar QuantitySets (com destaque)
+            for (const qset of allProps.quantitySets) {
+                container.appendChild(createPropertySetElement(qset, 'quantity-set'));
+            }
+
+            // Renderizar Type Properties
+            for (const typeProp of allProps.typeProperties) {
+                container.appendChild(createPropertySetElement(typeProp, 'type-property'));
+            }
+        }
+
+        // Criar elemento HTML para um PropertySet
+        function createPropertySetElement(pset, className = '') {
+            const div = document.createElement('div');
+            div.className = `property-set ${className}`;
+
+            const header = document.createElement('div');
+            header.className = 'property-set-header';
+            header.innerHTML = `
+                <span>${pset.name}</span>
+                <span class="toggle-icon">▶</span>
+            `;
+
+            const content = document.createElement('div');
+            content.className = 'property-set-content';
+
+            for (const prop of pset.properties) {
+                const item = document.createElement('div');
+                item.className = 'property-item';
+
+                let valueText = prop.value;
+                let valueClass = 'property-value';
+
+                if (typeof prop.value === 'number') {
+                    valueText = prop.value.toFixed(4);
+                    valueClass += ' number';
+                    if (prop.unit) {
+                        valueText += ` ${prop.unit}`;
+                    }
+                }
+
+                item.innerHTML = `
+                    <span class="property-name">${prop.name}</span>
+                    <span class="${valueClass}">${valueText ?? '-'}</span>
+                `;
+                content.appendChild(item);
+            }
+
+            // Toggle expandir/colapsar
+            header.addEventListener('click', () => {
+                header.classList.toggle('expanded');
+                content.classList.toggle('expanded');
+            });
+
+            div.appendChild(header);
+            div.appendChild(content);
+
+            return div;
+        }
+
         // Carregar IFC de URL
         async function loadIFCFromURL(url, name) {
             if (!ifcAPI) {
@@ -784,14 +1313,17 @@
                 showLoading('Processando IFC...', 75);
 
                 const modelID = ifcAPI.OpenModel(data);
+                currentModelID = modelID;
                 log(`Modelo aberto (ID: ${modelID})`, 'success');
 
                 showLoading('Gerando geometrias...', 85);
 
                 const modelGroup = new THREE.Group();
                 let meshCount = 0;
+                meshToExpressID.clear();
 
                 ifcAPI.StreamAllMeshes(modelID, (mesh) => {
+                    const expressID = mesh.expressID;  // ID do elemento IFC
                     const geoms = mesh.geometries;
                     for (let i = 0; i < geoms.size(); i++) {
                         const pg = geoms.get(i);
@@ -830,6 +1362,9 @@
                         const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
                         threeMesh.applyMatrix4(matrix);
 
+                        // Mapear mesh para expressID do elemento IFC
+                        meshToExpressID.set(threeMesh, expressID);
+
                         modelGroup.add(threeMesh);
                         meshCount++;
                         geom.delete();
@@ -866,7 +1401,13 @@
                 document.getElementById('views-panel').classList.add('active');
                 updateModelBounds();
 
-                ifcAPI.CloseModel(modelID);
+                // Construir mapa de propriedades IFC (para extração completa)
+                showLoading('Indexando propriedades IFC...', 98);
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                await buildPropertyMaps(WebIFC);
+
+                // NÃO fechar o modelo para poder acessar propriedades depois
+                // ifcAPI.CloseModel(modelID);
                 hideLoading();
                 log('Modelo carregado com sucesso!', 'success');
 
@@ -970,7 +1511,7 @@
             log('Órbita centralizada no modelo', 'success');
         }
 
-        function selectElement(event) {
+        async function selectElement(event) {
             if (measureMode) {
                 handleMeasureClick(event);
                 return;
@@ -1005,12 +1546,47 @@
                 box.getCenter(center);
                 box.getSize(size);
 
+                // Obter expressID do elemento IFC
+                const expressID = meshToExpressID.get(mesh);
+
                 document.getElementById('selection-panel').classList.add('active');
-                document.getElementById('sel-id').textContent = `Mesh #${currentModel.children.indexOf(mesh)}`;
+                document.getElementById('sel-id').textContent = expressID ? `#${expressID}` : `Mesh #${currentModel.children.indexOf(mesh)}`;
                 document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
                 document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
 
-                log(`Elemento selecionado: Mesh #${currentModel.children.indexOf(mesh)}`, 'success');
+                // Carregar propriedades IFC
+                if (expressID && currentModelID !== null) {
+                    document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Carregando propriedades...</p>';
+
+                    try {
+                        // Obter informações do elemento
+                        const element = ifcAPI.GetLine(currentModelID, expressID, true);
+                        const ifcType = getIFCTypeName(element?.type);
+                        const elementName = element?.Name?.value || element?.Name || '-';
+
+                        document.getElementById('sel-ifc-type').textContent = ifcType;
+                        document.getElementById('sel-name').textContent = elementName;
+
+                        // Obter todas as propriedades
+                        const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                        const allProps = getAllPropertiesForElement(expressID, WebIFC);
+                        renderPropertiesPanel(allProps);
+
+                        const totalProps = allProps.propertySets.length + allProps.quantitySets.length + allProps.typeProperties.length;
+                        log(`Elemento #${expressID} (${ifcType}): ${totalProps} conjuntos de propriedades`, 'success');
+                    } catch (e) {
+                        document.getElementById('sel-ifc-type').textContent = '-';
+                        document.getElementById('sel-name').textContent = '-';
+                        document.getElementById('ifc-properties-list').innerHTML = `<p class="loading-properties">Erro: ${e.message}</p>`;
+                        log(`Erro ao carregar propriedades: ${e.message}`, 'error');
+                    }
+                } else {
+                    document.getElementById('sel-ifc-type').textContent = '-';
+                    document.getElementById('sel-name').textContent = '-';
+                    document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Propriedades não disponíveis</p>';
+                }
+
+                log(`Elemento selecionado: ${expressID ? `#${expressID}` : `Mesh #${currentModel.children.indexOf(mesh)}`}`, 'success');
             } else {
                 clearSelection(true);
             }
@@ -1022,6 +1598,10 @@
                 selectedMesh = null;
                 originalMaterial = null;
                 document.getElementById('selection-panel').classList.remove('active');
+                // Limpar propriedades
+                document.getElementById('sel-ifc-type').textContent = '-';
+                document.getElementById('sel-name').textContent = '-';
+                document.getElementById('ifc-properties-list').innerHTML = '<p class="loading-properties">Selecione um elemento...</p>';
                 if (logMessage) {
                     log('Seleção limpa', 'info');
                 }
