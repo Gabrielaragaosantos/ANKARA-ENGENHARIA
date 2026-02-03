@@ -599,11 +599,9 @@
             background: var(--cor-panel);
             padding: 12px 15px;
             border-radius: 8px;
-            display: none;
             border-left: 3px solid #9C27B0;
             margin-top: 10px;
         }
-        #section-box-panel.active { display: block; }
         #section-box-panel h4 {
             color: #9C27B0;
             margin-bottom: 10px;
@@ -2377,7 +2375,6 @@
         function toggleSectionBox() {
             sectionBoxEnabled = !sectionBoxEnabled;
             const btn = document.getElementById('btn-sbox-toggle');
-            const panel = document.getElementById('section-box-panel');
 
             if (sectionBoxEnabled) {
                 // Desativar plano de corte simples se estiver ativo
@@ -2387,7 +2384,6 @@
 
                 btn.textContent = '📦 Desativar';
                 btn.classList.add('active');
-                panel.classList.add('active');
 
                 // Aplicar section box aos materiais
                 applySectionBox();
