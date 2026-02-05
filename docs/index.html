@@ -430,6 +430,167 @@
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ====== FEDERAÇÃO DE MODELOS ====== */
+        .model-select-checkbox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+        }
+
+        .model-select-checkbox input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            accent-color: var(--cor-primaria);
+        }
+
+        .model-card.selected {
+            border-color: var(--cor-accent);
+            box-shadow: 0 0 20px rgba(255, 179, 0, 0.3);
+        }
+
+        .model-card.selected .model-thumbnail::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 179, 0, 0.1);
+            pointer-events: none;
+        }
+
+        /* Barra de federação flutuante */
+        .federation-bar {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--cor-card) 0%, #1a1a1a 100%);
+            border: 2px solid var(--cor-accent);
+            border-radius: 16px;
+            padding: 15px 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            z-index: 1000;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transition: bottom 0.3s ease-out;
+        }
+
+        .federation-bar.visible {
+            bottom: 30px;
+        }
+
+        .federation-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .federation-icon {
+            font-size: 28px;
+        }
+
+        .federation-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .federation-count {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--cor-accent);
+        }
+
+        .federation-label {
+            font-size: 12px;
+            color: var(--cor-text-muted);
+        }
+
+        .federation-models-list {
+            display: flex;
+            gap: 8px;
+            max-width: 400px;
+            overflow-x: auto;
+            padding: 5px 0;
+        }
+
+        .federation-model-tag {
+            background: var(--cor-primaria);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .federation-model-tag .remove-tag {
+            cursor: pointer;
+            opacity: 0.7;
+            font-size: 14px;
+        }
+
+        .federation-model-tag .remove-tag:hover {
+            opacity: 1;
+        }
+
+        .federation-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-federate {
+            background: linear-gradient(135deg, var(--cor-accent) 0%, #FF8F00 100%);
+            color: #000;
+            font-weight: bold;
+            padding: 12px 24px;
+        }
+
+        .btn-federate:hover {
+            background: linear-gradient(135deg, #FFC107 0%, var(--cor-accent) 100%);
+            transform: translateY(-2px);
+        }
+
+        .btn-clear-selection {
+            background: transparent;
+            border: 1px solid var(--cor-text-muted);
+            color: var(--cor-text-muted);
+        }
+
+        .btn-clear-selection:hover {
+            border-color: var(--cor-text);
+            color: var(--cor-text);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Responsivo para barra de federação */
+        @media (max-width: 768px) {
+            .federation-bar {
+                left: 10px;
+                right: 10px;
+                transform: none;
+                flex-direction: column;
+                padding: 15px;
+                gap: 15px;
+            }
+
+            .federation-models-list {
+                max-width: 100%;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
+            .federation-actions {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -481,6 +642,28 @@
         </div>
     </main>
 
+    <!-- Barra de Federação de Modelos -->
+    <div class="federation-bar" id="federation-bar">
+        <div class="federation-info">
+            <span class="federation-icon">🔗</span>
+            <div class="federation-text">
+                <span class="federation-count"><span id="selected-count">0</span> modelos</span>
+                <span class="federation-label">selecionados para federação</span>
+            </div>
+        </div>
+        <div class="federation-models-list" id="selected-models-list">
+            <!-- Tags dos modelos selecionados -->
+        </div>
+        <div class="federation-actions">
+            <button class="btn btn-clear-selection" onclick="clearSelection()">
+                ✕ Limpar
+            </button>
+            <button class="btn btn-federate" onclick="openFederatedView()">
+                🔗 Federar Modelos
+            </button>
+        </div>
+    </div>
+
     <footer>
         <div class="footer-content">
             <div class="footer-info">
@@ -498,6 +681,7 @@
         // Variáveis globais
         let catalogo = { projetos: [], modelos: [] };
         let filteredModels = [];
+        let selectedModels = new Map(); // Map de id -> modelo
 
         // Carregar catálogo
         async function loadCatalogo() {
@@ -574,7 +758,7 @@
 
             emptyState.style.display = 'none';
 
-            grid.innerHTML = filteredModels.map(modelo => {
+            grid.innerHTML = filteredModels.map((modelo, index) => {
                 const projeto = catalogo.projetos.find(p => p.id === modelo.projeto);
                 const projetoNome = projeto ? projeto.nome : 'Outro';
                 const projetoIcone = projeto ? projeto.icone : '📁';
@@ -584,10 +768,19 @@
                     : '<div class="placeholder">🏗️</div>';
 
                 const viewerUrl = `viewer.html?modelo=${encodeURIComponent(modelo.url)}&nome=${encodeURIComponent(modelo.nome)}`;
+                const modelId = modelo.id || `model-${index}`;
+                const isSelected = selectedModels.has(modelId);
 
                 return `
-                    <div class="model-card">
+                    <div class="model-card ${isSelected ? 'selected' : ''}" data-model-id="${modelId}">
                         <div class="model-thumbnail">
+                            <div class="model-select-checkbox">
+                                <input type="checkbox"
+                                    id="select-${modelId}"
+                                    ${isSelected ? 'checked' : ''}
+                                    onchange="toggleModelSelection('${modelId}', this.checked)"
+                                    title="Selecionar para federação">
+                            </div>
                             ${thumbnailHtml}
                             <span class="model-badge">${modelo.formato || 'IFC'}</span>
                         </div>
@@ -628,6 +821,120 @@
             document.getElementById('empty-state').style.display = 'block';
             document.getElementById('count').textContent = '0';
         }
+
+        // ==================== FEDERAÇÃO DE MODELOS ====================
+
+        // Toggle seleção de um modelo
+        function toggleModelSelection(modelId, isChecked) {
+            const modelo = filteredModels.find((m, i) => (m.id || `model-${i}`) === modelId);
+            if (!modelo) return;
+
+            if (isChecked) {
+                selectedModels.set(modelId, modelo);
+            } else {
+                selectedModels.delete(modelId);
+            }
+
+            updateFederationUI();
+            updateCardSelectionState(modelId, isChecked);
+        }
+
+        // Atualizar estado visual do card
+        function updateCardSelectionState(modelId, isSelected) {
+            const card = document.querySelector(`.model-card[data-model-id="${modelId}"]`);
+            if (card) {
+                if (isSelected) {
+                    card.classList.add('selected');
+                } else {
+                    card.classList.remove('selected');
+                }
+            }
+        }
+
+        // Atualizar UI da barra de federação
+        function updateFederationUI() {
+            const bar = document.getElementById('federation-bar');
+            const countEl = document.getElementById('selected-count');
+            const listEl = document.getElementById('selected-models-list');
+
+            const count = selectedModels.size;
+            countEl.textContent = count;
+
+            // Mostrar/ocultar barra
+            if (count > 0) {
+                bar.classList.add('visible');
+            } else {
+                bar.classList.remove('visible');
+            }
+
+            // Atualizar lista de tags
+            listEl.innerHTML = Array.from(selectedModels.entries()).map(([id, modelo]) => `
+                <span class="federation-model-tag">
+                    ${modelo.nome}
+                    <span class="remove-tag" onclick="removeModelFromSelection('${id}')">✕</span>
+                </span>
+            `).join('');
+        }
+
+        // Remover modelo da seleção
+        function removeModelFromSelection(modelId) {
+            selectedModels.delete(modelId);
+
+            // Desmarcar checkbox
+            const checkbox = document.getElementById(`select-${modelId}`);
+            if (checkbox) checkbox.checked = false;
+
+            updateCardSelectionState(modelId, false);
+            updateFederationUI();
+        }
+
+        // Limpar toda a seleção
+        function clearSelection() {
+            selectedModels.forEach((_, id) => {
+                const checkbox = document.getElementById(`select-${id}`);
+                if (checkbox) checkbox.checked = false;
+                updateCardSelectionState(id, false);
+            });
+
+            selectedModels.clear();
+            updateFederationUI();
+        }
+
+        // Abrir visualização federada
+        function openFederatedView() {
+            if (selectedModels.size === 0) {
+                alert('Selecione pelo menos um modelo para visualizar.');
+                return;
+            }
+
+            if (selectedModels.size === 1) {
+                // Se apenas um modelo, abrir normalmente
+                const modelo = Array.from(selectedModels.values())[0];
+                const url = `viewer.html?modelo=${encodeURIComponent(modelo.url)}&nome=${encodeURIComponent(modelo.nome)}`;
+                window.location.href = url;
+                return;
+            }
+
+            // Múltiplos modelos - criar URL com parâmetros múltiplos
+            const modelos = Array.from(selectedModels.values());
+            const params = new URLSearchParams();
+
+            // Adicionar cada modelo como parâmetro separado
+            modelos.forEach((modelo, index) => {
+                params.append(`modelo${index + 1}`, modelo.url);
+                params.append(`nome${index + 1}`, modelo.nome);
+            });
+
+            // Nome composto para o título
+            const nomesFederados = modelos.map(m => m.nome).join(' + ');
+            params.append('federado', 'true');
+            params.append('nomeFederado', nomesFederados);
+
+            const url = `viewer.html?${params.toString()}`;
+            window.location.href = url;
+        }
+
+        // ==================== FIM FEDERAÇÃO ====================
 
         // Event listeners
         document.getElementById('projeto-filter').addEventListener('change', filterModels);

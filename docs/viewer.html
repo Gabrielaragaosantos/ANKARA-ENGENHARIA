@@ -1138,7 +1138,31 @@
         // Obter parâmetros da URL
         function getUrlParams() {
             const params = new URLSearchParams(window.location.search);
+
+            // Verificar se é federado (múltiplos modelos)
+            const federado = params.get('federado') === 'true';
+
+            if (federado) {
+                // Coletar todos os modelos (modelo1, modelo2, ...)
+                const modelos = [];
+                let i = 1;
+                while (params.has(`modelo${i}`)) {
+                    modelos.push({
+                        url: params.get(`modelo${i}`),
+                        nome: params.get(`nome${i}`) || `Modelo ${i}`
+                    });
+                    i++;
+                }
+                return {
+                    federado: true,
+                    modelos: modelos,
+                    nomeFederado: params.get('nomeFederado') || 'Modelos Federados'
+                };
+            }
+
+            // Modelo único (comportamento padrão)
             return {
+                federado: false,
                 modelo: params.get('modelo'),
                 nome: params.get('nome') || 'Modelo IFC'
             };
@@ -1941,6 +1965,163 @@
                 hideLoading();
                 document.getElementById('model-name').textContent = 'Erro ao carregar modelo';
                 alert(`Erro ao carregar IFC:\n\n${error.message}\n\nVerifique se a URL do modelo está correta.`);
+            }
+        }
+
+        // Carregar múltiplos modelos federados
+        async function loadFederatedModels(modelos, nomeFederado) {
+            if (!ifcAPI) {
+                alert('Motor IFC não inicializado. Recarregue a página.');
+                return;
+            }
+
+            try {
+                modelName = nomeFederado;
+                document.getElementById('model-name').textContent = `🔗 ${nomeFederado}`;
+                document.title = `${nomeFederado} - Visualizador IFC (Federado)`;
+
+                // Criar grupo principal para todos os modelos
+                const mainGroup = new THREE.Group();
+                mainGroup.name = 'FederatedModels';
+                let totalMeshCount = 0;
+
+                // Carregar cada modelo
+                for (let i = 0; i < modelos.length; i++) {
+                    const modelo = modelos[i];
+                    log(`Carregando modelo ${i + 1}/${modelos.length}: ${modelo.nome}`, 'info');
+                    showLoading(`Carregando ${modelo.nome}...`, (i / modelos.length) * 80);
+
+                    try {
+                        // Usar proxy para URLs do GitHub
+                        let fetchUrl = modelo.url;
+                        if (modelo.url.includes('github.com') || modelo.url.includes('githubusercontent.com')) {
+                            fetchUrl = CORS_PROXY + encodeURIComponent(modelo.url);
+                        }
+
+                        // Baixar arquivo
+                        const response = await fetch(fetchUrl);
+                        if (!response.ok) {
+                            throw new Error(`Erro HTTP: ${response.status}`);
+                        }
+
+                        const arrayBuffer = await response.arrayBuffer();
+                        const data = new Uint8Array(arrayBuffer);
+
+                        log(`${modelo.nome}: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'info');
+
+                        // Processar IFC
+                        const modelID = ifcAPI.OpenModel(data);
+
+                        // Criar grupo para este modelo
+                        const modelGroup = new THREE.Group();
+                        modelGroup.name = modelo.nome;
+                        let meshCount = 0;
+
+                        ifcAPI.StreamAllMeshes(modelID, (mesh) => {
+                            const expressID = mesh.expressID;
+                            const geoms = mesh.geometries;
+                            for (let j = 0; j < geoms.size(); j++) {
+                                const pg = geoms.get(j);
+                                const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
+                                const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                                const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+
+                                if (vData.length === 0) {
+                                    geom.delete();
+                                    continue;
+                                }
+
+                                const positions = [];
+                                const normals = [];
+                                for (let k = 0; k < vData.length; k += 6) {
+                                    positions.push(vData[k], vData[k+1], vData[k+2]);
+                                    normals.push(vData[k+3], vData[k+4], vData[k+5]);
+                                }
+
+                                const bufferGeom = new THREE.BufferGeometry();
+                                bufferGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                                bufferGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                                if (iData.length > 0) {
+                                    bufferGeom.setIndex(Array.from(iData));
+                                }
+
+                                const c = pg.color;
+                                const mat = new THREE.MeshPhongMaterial({
+                                    color: new THREE.Color(c.x, c.y, c.z),
+                                    opacity: c.w,
+                                    transparent: c.w < 1,
+                                    side: THREE.DoubleSide
+                                });
+
+                                const threeMesh = new THREE.Mesh(bufferGeom, mat);
+                                const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
+                                threeMesh.applyMatrix4(matrix);
+
+                                meshToExpressID.set(threeMesh, expressID);
+                                modelGroup.add(threeMesh);
+                                meshCount++;
+                                geom.delete();
+                            }
+                        });
+
+                        mainGroup.add(modelGroup);
+                        totalMeshCount += meshCount;
+                        log(`${modelo.nome}: ${meshCount} meshes`, 'success');
+
+                        // Manter último modelID para propriedades (limitação: só último modelo)
+                        currentModelID = modelID;
+
+                    } catch (modelError) {
+                        log(`Erro ao carregar ${modelo.nome}: ${modelError.message}`, 'error');
+                        console.error(modelError);
+                    }
+                }
+
+                showLoading('Finalizando federação...', 90);
+
+                // Adicionar grupo principal à cena
+                scene.add(mainGroup);
+                currentModel = mainGroup;
+
+                // Ajustar câmera
+                const box = new THREE.Box3().setFromObject(mainGroup);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(center.x + maxDim * 1.5, center.y + maxDim, center.z + maxDim * 1.5);
+                controls.target.copy(center);
+                controls.update();
+
+                // Atualizar UI
+                document.getElementById('info-panel').classList.add('active');
+                document.getElementById('info-name').textContent = `Federado: ${modelos.length} modelos`;
+                document.getElementById('info-elements').textContent = `Total: ${totalMeshCount} elementos`;
+                document.getElementById('info-size').textContent = `Dimensões: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`;
+                document.getElementById('btn-fit').disabled = false;
+                document.getElementById('btn-center-orbit').disabled = false;
+                document.getElementById('orbit-hint').style.display = 'block';
+                document.getElementById('transparency-panel').classList.add('active');
+                document.getElementById('clipping-panel').classList.add('active');
+                document.getElementById('measure-panel').classList.add('active');
+                document.getElementById('views-panel').classList.add('active');
+                updateModelBounds();
+
+                // Indexar propriedades
+                showLoading('Indexando propriedades...', 98);
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                await buildPropertyMaps(WebIFC);
+
+                hideLoading();
+                log(`Federação completa! ${modelos.length} modelos, ${totalMeshCount} elementos`, 'success');
+
+            } catch (error) {
+                log(`ERRO na federação: ${error.message}`, 'error');
+                console.error(error);
+                hideLoading();
+                alert(`Erro ao federar modelos:\n\n${error.message}`);
             }
         }
 
@@ -2834,7 +3015,12 @@
                 // Obter parâmetros da URL
                 const params = getUrlParams();
 
-                if (params.modelo) {
+                if (params.federado && params.modelos && params.modelos.length > 0) {
+                    // Modo federado - múltiplos modelos
+                    log(`Modo federado: ${params.modelos.length} modelos`, 'info');
+                    await loadFederatedModels(params.modelos, params.nomeFederado);
+                } else if (params.modelo) {
+                    // Modelo único
                     log('Modelo encontrado na URL', 'info');
                     await loadIFCFromURL(params.modelo, params.nome);
                 } else {
