@@ -1060,6 +1060,11 @@
         let typeToPropertySets = new Map();
         let meshToExpressID = new Map();  // Mapeia mesh -> expressID do elemento IFC
 
+        // Suporte a múltiplos modelos (federação)
+        let loadedModelIDs = [];  // Array de modelIDs carregados
+        let meshToModelID = new Map();  // Mapeia mesh -> modelID (para saber de qual modelo veio)
+        let modelPropertyMaps = new Map();  // Mapeia modelID -> { elementToPropertySets, elementToQuantitySets, etc. }
+
         // Seleção de elementos
         let selectedMesh = null;
         let originalMaterial = null;
@@ -1557,7 +1562,10 @@
         }
 
         // Obter todas as propriedades de um elemento
-        function getAllPropertiesForElement(expressID, WebIFC) {
+        // modelID é opcional - se não fornecido, usa currentModelID
+        function getAllPropertiesForElement(expressID, WebIFC, modelID = null) {
+            const targetModelID = modelID || currentModelID;
+
             const result = {
                 expressID: expressID,
                 element: null,
@@ -1566,38 +1574,172 @@
                 typeProperties: []
             };
 
+            // Verificar se temos mapas específicos para este modelo (modo federado)
+            let localElementToPropertySets = elementToPropertySets;
+            let localElementToQuantitySets = elementToQuantitySets;
+            let localElementToTypeProperties = elementToTypeProperties;
+            let localTypeToPropertySets = typeToPropertySets;
+
+            if (modelPropertyMaps.has(targetModelID)) {
+                const modelMaps = modelPropertyMaps.get(targetModelID);
+                localElementToPropertySets = modelMaps.elementToPropertySets;
+                localElementToQuantitySets = modelMaps.elementToQuantitySets;
+                localElementToTypeProperties = modelMaps.elementToTypeProperties;
+                localTypeToPropertySets = modelMaps.typeToPropertySets;
+            }
+
             // Obter dados do elemento
             try {
-                result.element = ifcAPI.GetLine(currentModelID, expressID, true);
+                result.element = ifcAPI.GetLine(targetModelID, expressID, true);
             } catch (e) {}
 
             // Propriedades diretas (PropertySets)
-            if (elementToPropertySets.has(expressID)) {
-                result.propertySets = elementToPropertySets.get(expressID);
-            }
-
-            // Quantidades (QuantitySets)
-            if (elementToQuantitySets.has(expressID)) {
-                result.quantitySets = elementToQuantitySets.get(expressID);
-            }
-
-            // Propriedades de Tipo
-            if (elementToTypeProperties.has(expressID)) {
-                const typeInfos = elementToTypeProperties.get(expressID);
-                for (const typeInfo of typeInfos) {
-                    // Adicionar identificação do tipo
-                    result.typeProperties.push({
-                        name: 'Tipo IFC',
-                        properties: [{ name: 'Nome do Tipo', value: typeInfo.typeName }]
-                    });
-                    // Adicionar PropertySets do tipo
-                    for (const pset of typeInfo.psets) {
-                        result.typeProperties.push(pset);
-                    }
+            if (localElementToPropertySets.has(expressID)) {
+                const psetIDs = localElementToPropertySets.get(expressID);
+                for (const psetID of psetIDs) {
+                    try {
+                        const pset = ifcAPI.GetLine(targetModelID, psetID, true);
+                        if (pset && pset.HasProperties) {
+                            const props = [];
+                            const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
+                            for (const propRef of hasProps) {
+                                try {
+                                    const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
+                                    if (prop) {
+                                        props.push({
+                                            name: prop.Name?.value || 'Sem nome',
+                                            value: extractPropertyValue(prop)
+                                        });
+                                    }
+                                } catch (e) {}
+                            }
+                            if (props.length > 0) {
+                                result.propertySets.push({
+                                    name: pset.Name?.value || 'PropertySet',
+                                    properties: props
+                                });
+                            }
+                        }
+                    } catch (e) {}
                 }
             }
 
+            // Quantidades (QuantitySets)
+            if (localElementToQuantitySets.has(expressID)) {
+                const qsetIDs = localElementToQuantitySets.get(expressID);
+                for (const qsetID of qsetIDs) {
+                    try {
+                        const qset = ifcAPI.GetLine(targetModelID, qsetID, true);
+                        if (qset && qset.Quantities) {
+                            const quantities = [];
+                            const hasQuantities = Array.isArray(qset.Quantities) ? qset.Quantities : [];
+                            for (const qRef of hasQuantities) {
+                                try {
+                                    const qty = ifcAPI.GetLine(targetModelID, qRef.value, true);
+                                    if (qty) {
+                                        const qtyData = extractQuantityValue(qty);
+                                        quantities.push(qtyData);
+                                    }
+                                } catch (e) {}
+                            }
+                            if (quantities.length > 0) {
+                                result.quantitySets.push({
+                                    name: qset.Name?.value || 'QuantitySet',
+                                    properties: quantities
+                                });
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            // Propriedades de Tipo
+            if (localElementToTypeProperties.has(expressID)) {
+                const typeID = localElementToTypeProperties.get(expressID);
+                try {
+                    const typeObj = ifcAPI.GetLine(targetModelID, typeID, true);
+                    if (typeObj) {
+                        // Adicionar identificação do tipo
+                        result.typeProperties.push({
+                            name: 'Tipo IFC',
+                            properties: [{ name: 'Nome do Tipo', value: typeObj.Name?.value || 'Sem nome' }]
+                        });
+
+                        // Buscar PropertySets do tipo
+                        if (localTypeToPropertySets.has(typeID)) {
+                            const typePsetIDs = localTypeToPropertySets.get(typeID);
+                            for (const psetID of typePsetIDs) {
+                                try {
+                                    const pset = ifcAPI.GetLine(targetModelID, psetID, true);
+                                    if (pset && pset.HasProperties) {
+                                        const props = [];
+                                        const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
+                                        for (const propRef of hasProps) {
+                                            try {
+                                                const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
+                                                if (prop) {
+                                                    props.push({
+                                                        name: prop.Name?.value || 'Sem nome',
+                                                        value: extractPropertyValue(prop)
+                                                    });
+                                                }
+                                            } catch (e) {}
+                                        }
+                                        if (props.length > 0) {
+                                            result.typeProperties.push({
+                                                name: `Tipo: ${pset.Name?.value || 'PropertySet'}`,
+                                                properties: props
+                                            });
+                                        }
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+
             return result;
+        }
+
+        // Extrair valor de uma propriedade IFC
+        function extractPropertyValue(prop) {
+            if (prop.NominalValue) {
+                return prop.NominalValue.value;
+            }
+            if (prop.Value) {
+                return prop.Value.value;
+            }
+            return '-';
+        }
+
+        // Extrair valor de uma quantidade IFC
+        function extractQuantityValue(qty) {
+            const name = qty.Name?.value || 'Quantidade';
+            let value = null;
+            let unit = '';
+
+            if (qty.LengthValue !== undefined) {
+                value = qty.LengthValue?.value ?? qty.LengthValue;
+                unit = 'm';
+            } else if (qty.AreaValue !== undefined) {
+                value = qty.AreaValue?.value ?? qty.AreaValue;
+                unit = 'm²';
+            } else if (qty.VolumeValue !== undefined) {
+                value = qty.VolumeValue?.value ?? qty.VolumeValue;
+                unit = 'm³';
+            } else if (qty.CountValue !== undefined) {
+                value = qty.CountValue?.value ?? qty.CountValue;
+                unit = 'un';
+            } else if (qty.WeightValue !== undefined) {
+                value = qty.WeightValue?.value ?? qty.WeightValue;
+                unit = 'kg';
+            } else if (qty.TimeValue !== undefined) {
+                value = qty.TimeValue?.value ?? qty.TimeValue;
+                unit = 's';
+            }
+
+            return { name, value, unit };
         }
 
         // Armazenar propriedades do elemento atual para o modal
@@ -1980,16 +2122,24 @@
                 document.getElementById('model-name').textContent = `🔗 ${nomeFederado}`;
                 document.title = `${nomeFederado} - Visualizador IFC (Federado)`;
 
+                // Limpar dados anteriores
+                loadedModelIDs = [];
+                meshToModelID.clear();
+                modelPropertyMaps.clear();
+                meshToExpressID.clear();
+
                 // Criar grupo principal para todos os modelos
                 const mainGroup = new THREE.Group();
                 mainGroup.name = 'FederatedModels';
                 let totalMeshCount = 0;
 
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+
                 // Carregar cada modelo
                 for (let i = 0; i < modelos.length; i++) {
                     const modelo = modelos[i];
                     log(`Carregando modelo ${i + 1}/${modelos.length}: ${modelo.nome}`, 'info');
-                    showLoading(`Carregando ${modelo.nome}...`, (i / modelos.length) * 80);
+                    showLoading(`Carregando ${modelo.nome}...`, (i / modelos.length) * 70);
 
                     try {
                         // Usar proxy para URLs do GitHub
@@ -2011,6 +2161,7 @@
 
                         // Processar IFC
                         const modelID = ifcAPI.OpenModel(data);
+                        loadedModelIDs.push(modelID);
 
                         // Criar grupo para este modelo
                         const modelGroup = new THREE.Group();
@@ -2057,7 +2208,10 @@
                                 const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
                                 threeMesh.applyMatrix4(matrix);
 
+                                // Mapear mesh -> expressID e mesh -> modelID
                                 meshToExpressID.set(threeMesh, expressID);
+                                meshToModelID.set(threeMesh, modelID);
+
                                 modelGroup.add(threeMesh);
                                 meshCount++;
                                 geom.delete();
@@ -2068,7 +2222,12 @@
                         totalMeshCount += meshCount;
                         log(`${modelo.nome}: ${meshCount} meshes`, 'success');
 
-                        // Manter último modelID para propriedades (limitação: só último modelo)
+                        // Indexar propriedades DESTE modelo
+                        showLoading(`Indexando propriedades de ${modelo.nome}...`, 70 + (i / modelos.length) * 25);
+                        await buildPropertyMapsForModel(modelID, WebIFC);
+                        log(`${modelo.nome}: propriedades indexadas`, 'success');
+
+                        // Manter o último como currentModelID (para compatibilidade)
                         currentModelID = modelID;
 
                     } catch (modelError) {
@@ -2077,7 +2236,7 @@
                     }
                 }
 
-                showLoading('Finalizando federação...', 90);
+                showLoading('Finalizando federação...', 98);
 
                 // Adicionar grupo principal à cena
                 scene.add(mainGroup);
@@ -2109,11 +2268,6 @@
                 document.getElementById('views-panel').classList.add('active');
                 updateModelBounds();
 
-                // Indexar propriedades
-                showLoading('Indexando propriedades...', 98);
-                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                await buildPropertyMaps(WebIFC);
-
                 hideLoading();
                 log(`Federação completa! ${modelos.length} modelos, ${totalMeshCount} elementos`, 'success');
 
@@ -2123,6 +2277,107 @@
                 hideLoading();
                 alert(`Erro ao federar modelos:\n\n${error.message}`);
             }
+        }
+
+        // Indexar propriedades de um modelo específico (para federação)
+        async function buildPropertyMapsForModel(modelID, WebIFC) {
+            // Criar mapas específicos para este modelo
+            const modelMaps = {
+                elementToPropertySets: new Map(),
+                elementToQuantitySets: new Map(),
+                elementToTypeProperties: new Map(),
+                typeToPropertySets: new Map()
+            };
+
+            try {
+                // Indexar IFCRELDEFINESBYPROPERTIES
+                const relDefinesByProps = ifcAPI.GetLineIDsWithType(modelID, WebIFC.IFCRELDEFINESBYPROPERTIES);
+                for (let i = 0; i < relDefinesByProps.size(); i++) {
+                    try {
+                        const relID = relDefinesByProps.get(i);
+                        const rel = ifcAPI.GetLine(modelID, relID, true);
+                        if (!rel || !rel.RelatingPropertyDefinition || !rel.RelatedObjects) continue;
+
+                        const propDefID = rel.RelatingPropertyDefinition.value;
+                        const propDef = ifcAPI.GetLine(modelID, propDefID, true);
+                        if (!propDef) continue;
+
+                        const isQuantitySet = propDef.type === WebIFC.IFCELEMENTQUANTITY;
+
+                        const relatedObjects = rel.RelatedObjects;
+                        if (Array.isArray(relatedObjects)) {
+                            for (const obj of relatedObjects) {
+                                const elementID = obj.value;
+                                if (isQuantitySet) {
+                                    if (!modelMaps.elementToQuantitySets.has(elementID)) {
+                                        modelMaps.elementToQuantitySets.set(elementID, []);
+                                    }
+                                    modelMaps.elementToQuantitySets.get(elementID).push(propDefID);
+                                } else {
+                                    if (!modelMaps.elementToPropertySets.has(elementID)) {
+                                        modelMaps.elementToPropertySets.set(elementID, []);
+                                    }
+                                    modelMaps.elementToPropertySets.get(elementID).push(propDefID);
+                                }
+                            }
+                        }
+                    } catch (e) { /* ignorar erros individuais */ }
+                }
+
+                // Indexar IFCRELDEFINESBYTYPE
+                const relDefinesByType = ifcAPI.GetLineIDsWithType(modelID, WebIFC.IFCRELDEFINESBYTYPE);
+                for (let i = 0; i < relDefinesByType.size(); i++) {
+                    try {
+                        const relID = relDefinesByType.get(i);
+                        const rel = ifcAPI.GetLine(modelID, relID, true);
+                        if (!rel || !rel.RelatingType || !rel.RelatedObjects) continue;
+
+                        const typeID = rel.RelatingType.value;
+                        const relatedObjects = rel.RelatedObjects;
+
+                        if (Array.isArray(relatedObjects)) {
+                            for (const obj of relatedObjects) {
+                                const elementID = obj.value;
+                                if (!modelMaps.elementToTypeProperties.has(elementID)) {
+                                    modelMaps.elementToTypeProperties.set(elementID, typeID);
+                                }
+                            }
+                        }
+                    } catch (e) { /* ignorar erros individuais */ }
+                }
+
+                // Indexar propriedades dos tipos
+                const typeClasses = [
+                    WebIFC.IFCWALLTYPE, WebIFC.IFCSLABTYPE, WebIFC.IFCCOLUMNTYPE,
+                    WebIFC.IFCBEAMTYPE, WebIFC.IFCDOORTYPE, WebIFC.IFCWINDOWTYPE,
+                    WebIFC.IFCFURNITURETYPE, WebIFC.IFCCOVERINGTYPE, WebIFC.IFCRAILINGTYPE,
+                    WebIFC.IFCSTAIRTYPE, WebIFC.IFCSTAIRFLIGHTTYPE, WebIFC.IFCRAMPTYPE,
+                    WebIFC.IFCROOFTYPE, WebIFC.IFCBUILDINGELEMENTPROXYTYPE
+                ].filter(t => t !== undefined);
+
+                for (const typeClass of typeClasses) {
+                    try {
+                        const typeIDs = ifcAPI.GetLineIDsWithType(modelID, typeClass);
+                        for (let i = 0; i < typeIDs.size(); i++) {
+                            const typeID = typeIDs.get(i);
+                            const typeObj = ifcAPI.GetLine(modelID, typeID, true);
+                            if (typeObj && typeObj.HasPropertySets) {
+                                const psets = Array.isArray(typeObj.HasPropertySets)
+                                    ? typeObj.HasPropertySets.map(p => p.value)
+                                    : [];
+                                if (psets.length > 0) {
+                                    modelMaps.typeToPropertySets.set(typeID, psets);
+                                }
+                            }
+                        }
+                    } catch (e) { /* ignorar erros */ }
+                }
+            } catch (e) {
+                console.warn('Erro ao indexar propriedades do modelo:', e);
+            }
+
+            // Salvar mapas para este modelo
+            modelPropertyMaps.set(modelID, modelMaps);
         }
 
         function fitModel() {
@@ -2254,19 +2509,22 @@
                 // Obter expressID do elemento IFC
                 const expressID = meshToExpressID.get(mesh);
 
+                // Obter modelID do mesh (para modelos federados)
+                const meshModelID = meshToModelID.get(mesh) ?? currentModelID;
+
                 document.getElementById('selection-panel').classList.add('active');
                 document.getElementById('sel-id').textContent = expressID ? `#${expressID}` : `Mesh #${currentModel.children.indexOf(mesh)}`;
                 document.getElementById('sel-position').textContent = `(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`;
                 document.getElementById('sel-size').textContent = `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`;
 
                 // Carregar propriedades IFC
-                if (expressID && currentModelID !== null) {
+                if (expressID && meshModelID !== null) {
                     document.getElementById('properties-preview').style.display = 'none';
                     document.getElementById('btn-expand-props').style.display = 'none';
 
                     try {
-                        // Obter informações do elemento
-                        const element = ifcAPI.GetLine(currentModelID, expressID, true);
+                        // Obter informações do elemento usando o modelID correto
+                        const element = ifcAPI.GetLine(meshModelID, expressID, true);
                         const ifcType = getIFCTypeName(element?.type);
                         const elementName = element?.Name?.value || element?.Name || '-';
 
@@ -2280,9 +2538,9 @@
                             id: `#${expressID}`
                         };
 
-                        // Obter todas as propriedades
+                        // Obter todas as propriedades usando o modelID correto
                         const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                        const allProps = getAllPropertiesForElement(expressID, WebIFC);
+                        const allProps = getAllPropertiesForElement(expressID, WebIFC, meshModelID);
 
                         // Armazenar propriedades e renderizar preview
                         currentElementProps = allProps;
