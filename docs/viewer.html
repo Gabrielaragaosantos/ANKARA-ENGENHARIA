@@ -1583,6 +1583,7 @@
             let localElementToQuantitySets = elementToQuantitySets;
             let localElementToTypeProperties = elementToTypeProperties;
             let localTypeToPropertySets = typeToPropertySets;
+            let isFederatedMode = false;
 
             if (modelPropertyMaps.has(targetModelID)) {
                 const modelMaps = modelPropertyMaps.get(targetModelID);
@@ -1590,6 +1591,7 @@
                 localElementToQuantitySets = modelMaps.elementToQuantitySets;
                 localElementToTypeProperties = modelMaps.elementToTypeProperties;
                 localTypeToPropertySets = modelMaps.typeToPropertySets;
+                isFederatedMode = true;
             }
 
             // Obter dados do elemento
@@ -1599,116 +1601,175 @@
 
             // Propriedades diretas (PropertySets)
             if (localElementToPropertySets.has(expressID)) {
-                const psetIDs = localElementToPropertySets.get(expressID);
-                for (const psetID of psetIDs) {
-                    try {
-                        const pset = ifcAPI.GetLine(targetModelID, psetID, true);
-                        if (pset && pset.HasProperties) {
-                            const props = [];
-                            const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
-                            for (const propRef of hasProps) {
-                                try {
-                                    const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
-                                    if (prop) {
-                                        const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
-                                        props.push({
-                                            name: extracted?.name || prop.Name?.value || 'Sem nome',
-                                            value: extracted?.value ?? '-'
-                                        });
-                                    }
-                                } catch (e) {}
+                const psetData = localElementToPropertySets.get(expressID);
+
+                if (isFederatedMode) {
+                    // Modo federado: psetData contém IDs
+                    for (const psetID of psetData) {
+                        try {
+                            const pset = ifcAPI.GetLine(targetModelID, psetID, true);
+                            if (pset && pset.HasProperties) {
+                                const props = [];
+                                const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
+                                for (const propRef of hasProps) {
+                                    try {
+                                        const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
+                                        if (prop) {
+                                            const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
+                                            props.push({
+                                                name: extracted?.name || prop.Name?.value || 'Sem nome',
+                                                value: extracted?.value ?? '-'
+                                            });
+                                        }
+                                    } catch (e) {}
+                                }
+                                if (props.length > 0) {
+                                    result.propertySets.push({
+                                        name: pset.Name?.value || 'PropertySet',
+                                        properties: props
+                                    });
+                                }
                             }
-                            if (props.length > 0) {
-                                result.propertySets.push({
-                                    name: pset.Name?.value || 'PropertySet',
-                                    properties: props
-                                });
-                            }
+                        } catch (e) {}
+                    }
+                } else {
+                    // Modo individual: psetData contém objetos já processados
+                    for (const pset of psetData) {
+                        if (pset && pset.properties && pset.properties.length > 0) {
+                            result.propertySets.push({
+                                name: pset.name || 'PropertySet',
+                                properties: pset.properties.map(p => ({
+                                    name: p.name || 'Sem nome',
+                                    value: p.value ?? '-'
+                                }))
+                            });
                         }
-                    } catch (e) {}
+                    }
                 }
             }
 
             // Quantidades (QuantitySets)
             if (localElementToQuantitySets.has(expressID)) {
-                const qsetIDs = localElementToQuantitySets.get(expressID);
-                for (const qsetID of qsetIDs) {
-                    try {
-                        const qset = ifcAPI.GetLine(targetModelID, qsetID, true);
-                        if (qset && qset.Quantities) {
-                            const quantities = [];
-                            const hasQuantities = Array.isArray(qset.Quantities) ? qset.Quantities : [];
-                            for (const qRef of hasQuantities) {
-                                try {
-                                    const qty = ifcAPI.GetLine(targetModelID, qRef.value, true);
-                                    if (qty) {
-                                        const qtyData = extractQuantityValue(qty, WebIFC, targetModelID);
-                                        if (qtyData) {
-                                            quantities.push({
-                                                name: qtyData.name || 'Quantidade',
-                                                value: qtyData.value ?? '-',
-                                                unit: qtyData.unit || ''
-                                            });
+                const qsetData = localElementToQuantitySets.get(expressID);
+
+                if (isFederatedMode) {
+                    // Modo federado: qsetData contém IDs
+                    for (const qsetID of qsetData) {
+                        try {
+                            const qset = ifcAPI.GetLine(targetModelID, qsetID, true);
+                            if (qset && qset.Quantities) {
+                                const quantities = [];
+                                const hasQuantities = Array.isArray(qset.Quantities) ? qset.Quantities : [];
+                                for (const qRef of hasQuantities) {
+                                    try {
+                                        const qty = ifcAPI.GetLine(targetModelID, qRef.value, true);
+                                        if (qty) {
+                                            const qtyExtracted = extractQuantityValue(qty, WebIFC, targetModelID);
+                                            if (qtyExtracted) {
+                                                quantities.push({
+                                                    name: qtyExtracted.name || 'Quantidade',
+                                                    value: qtyExtracted.value ?? '-',
+                                                    unit: qtyExtracted.unit || ''
+                                                });
+                                            }
                                         }
-                                    }
-                                } catch (e) {}
+                                    } catch (e) {}
+                                }
+                                if (quantities.length > 0) {
+                                    result.quantitySets.push({
+                                        name: qset.Name?.value || 'QuantitySet',
+                                        properties: quantities
+                                    });
+                                }
                             }
-                            if (quantities.length > 0) {
-                                result.quantitySets.push({
-                                    name: qset.Name?.value || 'QuantitySet',
-                                    properties: quantities
-                                });
-                            }
+                        } catch (e) {}
+                    }
+                } else {
+                    // Modo individual: qsetData contém objetos já processados
+                    for (const qset of qsetData) {
+                        if (qset && qset.properties && qset.properties.length > 0) {
+                            result.quantitySets.push({
+                                name: qset.name || 'QuantitySet',
+                                properties: qset.properties.map(p => ({
+                                    name: p.name || 'Quantidade',
+                                    value: p.value ?? '-',
+                                    unit: p.unit || ''
+                                }))
+                            });
                         }
-                    } catch (e) {}
+                    }
                 }
             }
 
             // Propriedades de Tipo
             if (localElementToTypeProperties.has(expressID)) {
-                const typeID = localElementToTypeProperties.get(expressID);
-                try {
-                    const typeObj = ifcAPI.GetLine(targetModelID, typeID, true);
-                    if (typeObj) {
-                        // Adicionar identificação do tipo
+                const typeData = localElementToTypeProperties.get(expressID);
+
+                if (isFederatedMode) {
+                    // Modo federado: typeData é um ID de tipo
+                    const typeID = typeData;
+                    try {
+                        const typeObj = ifcAPI.GetLine(targetModelID, typeID, true);
+                        if (typeObj) {
+                            result.typeProperties.push({
+                                name: 'Tipo IFC',
+                                properties: [{ name: 'Nome do Tipo', value: typeObj.Name?.value || 'Sem nome' }]
+                            });
+
+                            if (localTypeToPropertySets.has(typeID)) {
+                                const typePsetIDs = localTypeToPropertySets.get(typeID);
+                                for (const psetID of typePsetIDs) {
+                                    try {
+                                        const pset = ifcAPI.GetLine(targetModelID, psetID, true);
+                                        if (pset && pset.HasProperties) {
+                                            const props = [];
+                                            const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
+                                            for (const propRef of hasProps) {
+                                                try {
+                                                    const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
+                                                    if (prop) {
+                                                        const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
+                                                        props.push({
+                                                            name: extracted?.name || prop.Name?.value || 'Sem nome',
+                                                            value: extracted?.value ?? '-'
+                                                        });
+                                                    }
+                                                } catch (e) {}
+                                            }
+                                            if (props.length > 0) {
+                                                result.typeProperties.push({
+                                                    name: `Tipo: ${pset.Name?.value || 'PropertySet'}`,
+                                                    properties: props
+                                                });
+                                            }
+                                        }
+                                    } catch (e) {}
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                } else {
+                    // Modo individual: typeData é um array de objetos já processados
+                    for (const typeInfo of typeData) {
                         result.typeProperties.push({
                             name: 'Tipo IFC',
-                            properties: [{ name: 'Nome do Tipo', value: typeObj.Name?.value || 'Sem nome' }]
+                            properties: [{ name: 'Nome do Tipo', value: typeInfo.typeName || 'Sem nome' }]
                         });
-
-                        // Buscar PropertySets do tipo
-                        if (localTypeToPropertySets.has(typeID)) {
-                            const typePsetIDs = localTypeToPropertySets.get(typeID);
-                            for (const psetID of typePsetIDs) {
-                                try {
-                                    const pset = ifcAPI.GetLine(targetModelID, psetID, true);
-                                    if (pset && pset.HasProperties) {
-                                        const props = [];
-                                        const hasProps = Array.isArray(pset.HasProperties) ? pset.HasProperties : [];
-                                        for (const propRef of hasProps) {
-                                            try {
-                                                const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
-                                                if (prop) {
-                                                    const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
-                                                    props.push({
-                                                        name: extracted?.name || prop.Name?.value || 'Sem nome',
-                                                        value: extracted?.value ?? '-'
-                                                    });
-                                                }
-                                            } catch (e) {}
-                                        }
-                                        if (props.length > 0) {
-                                            result.typeProperties.push({
-                                                name: `Tipo: ${pset.Name?.value || 'PropertySet'}`,
-                                                properties: props
-                                            });
-                                        }
-                                    }
-                                } catch (e) {}
+                        if (typeInfo.psets && Array.isArray(typeInfo.psets)) {
+                            for (const pset of typeInfo.psets) {
+                                if (pset && pset.properties && pset.properties.length > 0) {
+                                    result.typeProperties.push({
+                                        name: pset.name || 'PropertySet (IFC Type)',
+                                        properties: pset.properties.map(p => ({
+                                            name: p.name || 'Sem nome',
+                                            value: p.value ?? '-'
+                                        }))
+                                    });
+                                }
                             }
                         }
                     }
-                } catch (e) {}
+                }
             }
 
             return result;
