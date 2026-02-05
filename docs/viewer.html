@@ -1287,13 +1287,15 @@
         }
 
         // Extrair valor de uma propriedade IFC
-        function extractPropertyValue(prop, WebIFC) {
+        // modelID é opcional - se não fornecido, usa currentModelID
+        function extractPropertyValue(prop, WebIFC, modelID = null) {
             if (!prop) return null;
+            const targetModelID = modelID ?? currentModelID;
 
             let property = prop;
             if (prop.value !== undefined && typeof prop.value === 'number') {
                 try {
-                    property = ifcAPI.GetLine(currentModelID, prop.value, true);
+                    property = ifcAPI.GetLine(targetModelID, prop.value, true);
                 } catch (e) {
                     return null;
                 }
@@ -1338,13 +1340,15 @@
         }
 
         // Extrair valor de uma quantidade IFC
-        function extractQuantityValue(qty, WebIFC) {
+        // modelID é opcional - se não fornecido, usa currentModelID
+        function extractQuantityValue(qty, WebIFC, modelID = null) {
             if (!qty) return null;
+            const targetModelID = modelID ?? currentModelID;
 
             let quantity = qty;
             if (qty.value !== undefined && typeof qty.value === 'number') {
                 try {
-                    quantity = ifcAPI.GetLine(currentModelID, qty.value, true);
+                    quantity = ifcAPI.GetLine(targetModelID, qty.value, true);
                 } catch (e) {
                     return null;
                 }
@@ -1606,7 +1610,7 @@
                                 try {
                                     const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
                                     if (prop) {
-                                        const extracted = extractPropertyValue(prop, WebIFC);
+                                        const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
                                         props.push({
                                             name: extracted?.name || prop.Name?.value || 'Sem nome',
                                             value: extracted?.value ?? '-'
@@ -1638,7 +1642,7 @@
                                 try {
                                     const qty = ifcAPI.GetLine(targetModelID, qRef.value, true);
                                     if (qty) {
-                                        const qtyData = extractQuantityValue(qty, WebIFC);
+                                        const qtyData = extractQuantityValue(qty, WebIFC, targetModelID);
                                         if (qtyData) {
                                             quantities.push({
                                                 name: qtyData.name || 'Quantidade',
@@ -1685,7 +1689,7 @@
                                             try {
                                                 const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
                                                 if (prop) {
-                                                    const extracted = extractPropertyValue(prop, WebIFC);
+                                                    const extracted = extractPropertyValue(prop, WebIFC, targetModelID);
                                                     props.push({
                                                         name: extracted?.name || prop.Name?.value || 'Sem nome',
                                                         value: extracted?.value ?? '-'
