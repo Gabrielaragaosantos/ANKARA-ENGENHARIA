@@ -1606,9 +1606,10 @@
                                 try {
                                     const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
                                     if (prop) {
+                                        const extracted = extractPropertyValue(prop, WebIFC);
                                         props.push({
-                                            name: prop.Name?.value || 'Sem nome',
-                                            value: extractPropertyValue(prop)
+                                            name: extracted?.name || prop.Name?.value || 'Sem nome',
+                                            value: extracted?.value ?? '-'
                                         });
                                     }
                                 } catch (e) {}
@@ -1637,8 +1638,14 @@
                                 try {
                                     const qty = ifcAPI.GetLine(targetModelID, qRef.value, true);
                                     if (qty) {
-                                        const qtyData = extractQuantityValue(qty);
-                                        quantities.push(qtyData);
+                                        const qtyData = extractQuantityValue(qty, WebIFC);
+                                        if (qtyData) {
+                                            quantities.push({
+                                                name: qtyData.name || 'Quantidade',
+                                                value: qtyData.value ?? '-',
+                                                unit: qtyData.unit || ''
+                                            });
+                                        }
                                     }
                                 } catch (e) {}
                             }
@@ -1678,9 +1685,10 @@
                                             try {
                                                 const prop = ifcAPI.GetLine(targetModelID, propRef.value, true);
                                                 if (prop) {
+                                                    const extracted = extractPropertyValue(prop, WebIFC);
                                                     props.push({
-                                                        name: prop.Name?.value || 'Sem nome',
-                                                        value: extractPropertyValue(prop)
+                                                        name: extracted?.name || prop.Name?.value || 'Sem nome',
+                                                        value: extracted?.value ?? '-'
                                                     });
                                                 }
                                             } catch (e) {}
@@ -1700,46 +1708,6 @@
             }
 
             return result;
-        }
-
-        // Extrair valor de uma propriedade IFC
-        function extractPropertyValue(prop) {
-            if (prop.NominalValue) {
-                return prop.NominalValue.value;
-            }
-            if (prop.Value) {
-                return prop.Value.value;
-            }
-            return '-';
-        }
-
-        // Extrair valor de uma quantidade IFC
-        function extractQuantityValue(qty) {
-            const name = qty.Name?.value || 'Quantidade';
-            let value = null;
-            let unit = '';
-
-            if (qty.LengthValue !== undefined) {
-                value = qty.LengthValue?.value ?? qty.LengthValue;
-                unit = 'm';
-            } else if (qty.AreaValue !== undefined) {
-                value = qty.AreaValue?.value ?? qty.AreaValue;
-                unit = 'm²';
-            } else if (qty.VolumeValue !== undefined) {
-                value = qty.VolumeValue?.value ?? qty.VolumeValue;
-                unit = 'm³';
-            } else if (qty.CountValue !== undefined) {
-                value = qty.CountValue?.value ?? qty.CountValue;
-                unit = 'un';
-            } else if (qty.WeightValue !== undefined) {
-                value = qty.WeightValue?.value ?? qty.WeightValue;
-                unit = 'kg';
-            } else if (qty.TimeValue !== undefined) {
-                value = qty.TimeValue?.value ?? qty.TimeValue;
-                unit = 's';
-            }
-
-            return { name, value, unit };
         }
 
         // Armazenar propriedades do elemento atual para o modal
