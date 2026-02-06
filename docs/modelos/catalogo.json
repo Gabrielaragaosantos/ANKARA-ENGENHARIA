@@ -27,6 +27,18 @@
       "formato": "IFC 4",
       "autor": "Consórcio MPD/Ankara",
       "data": "2025-01"
+    },
+    {
+      "id": "arq-r-0001-pe-mode-r17-cozinha",
+      "nome": "ARQ_R_0001_PE_MODE_R17",
+      "descricao": "Modelo arquitetônico - Template ASBT Cozinha - UNILA Campus Arandu",
+      "projeto": "unila",
+      "thumbnail": "modelos/thumbnails/placeholder.png",
+      "url": "https://github.com/Gabrielaragaosantos/ANKARA-ENGENHARIA/releases/download/IFC/ARQ_R_0001_PE_MODE_R17.TEM.ASBT.-.COZINHA.ifc",
+      "tamanho": "10-50 MB",
+      "formato": "IFC 4",
+      "autor": "Consórcio MPD/Ankara",
+      "data": "2025-02"
     }
   ]
 }
