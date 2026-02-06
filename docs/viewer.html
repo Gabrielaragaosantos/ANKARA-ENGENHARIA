@@ -846,6 +846,160 @@
         }
         .credits a { color: var(--cor-primaria); text-decoration: none; }
         .credits a:hover { text-decoration: underline; }
+
+        /* ====== PAINEL DE QUANTIFICAÇÃO ====== */
+        #quantification-panel {
+            background: var(--cor-panel);
+            padding: 12px 15px;
+            border-radius: 8px;
+            border-left: 3px solid #0277BD;
+            display: none;
+        }
+        #quantification-panel.active { display: block; }
+        #quantification-panel h4 {
+            color: #0277BD;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .quantification-filters {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .quantification-filters select {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+        }
+
+        .quantification-totals {
+            background: #1a1a1a;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+        }
+        .total-row:last-child { border-bottom: none; }
+        .total-row .label { color: var(--cor-text-muted); }
+        .total-row .value { color: #0277BD; font-weight: bold; }
+        .total-row .value.zero { color: #666; }
+
+        .quantification-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .quantification-actions .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+        /* Modal de Quantificação Detalhada */
+        #quantification-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1001;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        #quantification-modal.active { display: flex; }
+
+        .quantification-modal-content {
+            background: var(--cor-card, var(--cor-sidebar));
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .quantification-modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .quantification-modal-header h3 {
+            color: #0277BD;
+            margin: 0;
+        }
+        .quantification-modal-header span {
+            color: var(--cor-text-muted);
+            font-size: 12px;
+        }
+
+        .quantification-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .quantification-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .quantification-table th {
+            background: #1a1a1a;
+            padding: 10px 8px;
+            text-align: left;
+            color: var(--cor-text-muted);
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+        .quantification-table td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .quantification-table tr:hover {
+            background: rgba(2, 119, 189, 0.1);
+        }
+        .quantification-table .number {
+            text-align: right;
+            font-family: monospace;
+            color: #0277BD;
+        }
+        .quantification-table .type-header {
+            background: #2a2a2a;
+            font-weight: bold;
+            color: var(--cor-accent);
+        }
+        .quantification-table .subtotal {
+            background: #1a1a1a;
+            font-weight: bold;
+        }
+        .quantification-table .grand-total {
+            background: #0277BD;
+            color: white;
+            font-weight: bold;
+        }
+
+        .quantification-modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -970,6 +1124,69 @@
                     <button id="btn-measure-clear" class="btn btn-measure-clear">🗑️ Limpar</button>
                 </div>
             </div>
+
+            <!-- Painel de Quantificação -->
+            <div id="quantification-panel">
+                <h4>📊 Quantificação para Orçamento</h4>
+
+                <div class="quantification-filters">
+                    <select id="filter-ifc-type">
+                        <option value="">🏗️ Todos os Tipos IFC</option>
+                        <option value="IFCWALL">Paredes (IfcWall)</option>
+                        <option value="IFCSLAB">Lajes (IfcSlab)</option>
+                        <option value="IFCCOLUMN">Pilares (IfcColumn)</option>
+                        <option value="IFCBEAM">Vigas (IfcBeam)</option>
+                        <option value="IFCFOOTING">Sapatas (IfcFooting)</option>
+                        <option value="IFCSTAIR">Escadas (IfcStair)</option>
+                        <option value="IFCDOOR">Portas (IfcDoor)</option>
+                        <option value="IFCWINDOW">Janelas (IfcWindow)</option>
+                        <option value="IFCROOF">Coberturas (IfcRoof)</option>
+                        <option value="IFCRAILING">Guarda-corpos (IfcRailing)</option>
+                        <option value="IFCMEMBER">Elementos Estruturais (IfcMember)</option>
+                        <option value="IFCPLATE">Chapas (IfcPlate)</option>
+                        <option value="IFCCOVERING">Revestimentos (IfcCovering)</option>
+                    </select>
+
+                    <select id="filter-quantity-type">
+                        <option value="">📏 Todas as Quantidades</option>
+                        <option value="Volume">Volume (m³)</option>
+                        <option value="Área">Área (m²)</option>
+                        <option value="Comprimento">Comprimento (m)</option>
+                        <option value="Contagem">Contagem (un)</option>
+                        <option value="Peso">Peso (kg)</option>
+                    </select>
+                </div>
+
+                <div class="quantification-totals" id="quantification-totals">
+                    <div class="total-row">
+                        <span class="label">📦 Volume Total:</span>
+                        <span class="value" id="total-volume">-</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="label">📐 Área Total:</span>
+                        <span class="value" id="total-area">-</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="label">📏 Comprimento Total:</span>
+                        <span class="value" id="total-length">-</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="label">🔢 Contagem:</span>
+                        <span class="value" id="total-count">-</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="label">⚖️ Peso Total:</span>
+                        <span class="value" id="total-weight">-</span>
+                    </div>
+                </div>
+
+                <div class="quantification-actions">
+                    <button id="btn-calc-quantification" class="btn">🔄 Calcular</button>
+                    <button id="btn-view-details" class="btn btn-secondary" disabled>📋 Detalhes</button>
+                    <button id="btn-export-csv" class="btn btn-accent" disabled style="background: #0277BD;">📥 CSV</button>
+                </div>
+            </div>
+
             <div id="views-panel">
                 <h4>👁️ Vistas Predefinidas</h4>
                 <div class="views-grid">
@@ -1027,6 +1244,40 @@
             <div class="properties-modal-footer">
                 <button class="btn btn-expand-all" id="btn-expand-all">▼ Expandir Tudo</button>
                 <button class="btn btn-collapse-all" id="btn-collapse-all">▲ Recolher Tudo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Quantificação Detalhada -->
+    <div id="quantification-modal">
+        <div class="quantification-modal-content">
+            <div class="quantification-modal-header">
+                <div>
+                    <h3>📊 Quantificação Detalhada</h3>
+                    <span id="quantification-summary-text">-</span>
+                </div>
+                <button class="btn-close-modal" id="btn-close-quantification">✕</button>
+            </div>
+            <div class="quantification-modal-body">
+                <table class="quantification-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo IFC</th>
+                            <th>Nome</th>
+                            <th class="number">Volume (m³)</th>
+                            <th class="number">Área (m²)</th>
+                            <th class="number">Comprimento (m)</th>
+                            <th class="number">Peso (kg)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quantification-table-body">
+                    </tbody>
+                </table>
+            </div>
+            <div class="quantification-modal-footer">
+                <button id="btn-export-csv-modal" class="btn" style="background: #0277BD;">📥 Exportar CSV</button>
+                <button id="btn-close-quantification-footer" class="btn btn-secondary">Fechar</button>
             </div>
         </div>
     </div>
@@ -1114,6 +1365,23 @@
         let measureSpheres = [];
         const measureMaterial = new THREE.LineBasicMaterial({ color: 0xFFEB3B, linewidth: 2 });
         const measureSphereMaterial = new THREE.MeshBasicMaterial({ color: 0xFFEB3B });
+
+        // Quantificação para orçamento
+        let quantificationResults = {
+            elements: [],      // Lista de elementos com quantidades
+            totals: {          // Totais agregados
+                volume: 0,
+                area: 0,
+                length: 0,
+                count: 0,
+                weight: 0
+            },
+            byType: new Map()  // Agrupado por tipo IFC
+        };
+        let quantificationFilter = {
+            ifcType: null,           // Filtro por tipo IFC (null = todos)
+            quantityType: null       // Filtro por tipo de quantidade (null = todos)
+        };
 
         // Logger
         function log(msg, type = 'info') {
@@ -2103,6 +2371,322 @@
             return div;
         }
 
+        // ==================== QUANTIFICAÇÃO PARA ORÇAMENTO ====================
+
+        // Calcular quantificação de todos os elementos
+        async function calculateQuantification() {
+            if (!currentModel) {
+                log('Nenhum modelo carregado', 'warning');
+                return;
+            }
+
+            log('Calculando quantificação...', 'info');
+            showLoading('Calculando quantificação...', 0);
+
+            // Resetar resultados
+            quantificationResults = {
+                elements: [],
+                totals: { volume: 0, area: 0, length: 0, count: 0, weight: 0 },
+                byType: new Map()
+            };
+
+            const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+            const filterType = quantificationFilter.ifcType;
+            const filterQty = quantificationFilter.quantityType;
+
+            // Iterar todos os meshes do modelo
+            const meshes = [];
+            currentModel.traverse(child => {
+                if (child.isMesh && meshToExpressID.has(child)) {
+                    meshes.push(child);
+                }
+            });
+
+            let processed = 0;
+            for (const mesh of meshes) {
+                const expressID = meshToExpressID.get(mesh);
+                const modelID = meshToModelID.get(mesh) ?? currentModelID;
+
+                try {
+                    // Obter elemento e tipo
+                    const element = ifcAPI.GetLine(modelID, expressID, true);
+                    const ifcType = getIFCTypeName(element?.type);
+
+                    // Filtrar por tipo IFC se especificado
+                    if (filterType && !ifcType.toUpperCase().includes(filterType)) {
+                        processed++;
+                        continue;
+                    }
+
+                    // Obter propriedades
+                    const props = getAllPropertiesForElement(expressID, WebIFC, modelID);
+                    const elementName = element?.Name?.value || element?.Name || '-';
+
+                    // Extrair quantidades
+                    const quantities = {
+                        expressID,
+                        modelID,
+                        ifcType,
+                        name: elementName,
+                        volume: 0,
+                        area: 0,
+                        length: 0,
+                        count: 0,
+                        weight: 0,
+                        mesh: mesh  // Referência para destaque visual
+                    };
+
+                    // Processar QuantitySets
+                    for (const qset of props.quantitySets) {
+                        for (const prop of qset.properties) {
+                            const value = typeof prop.value === 'number' ? prop.value : 0;
+
+                            // Filtrar por tipo de quantidade se especificado
+                            if (filterQty && prop.quantityType !== filterQty) {
+                                continue;
+                            }
+
+                            switch (prop.quantityType) {
+                                case 'Volume':
+                                    quantities.volume += value;
+                                    break;
+                                case 'Área':
+                                    quantities.area += value;
+                                    break;
+                                case 'Comprimento':
+                                    quantities.length += value;
+                                    break;
+                                case 'Contagem':
+                                    quantities.count += value;
+                                    break;
+                                case 'Peso':
+                                    quantities.weight += value;
+                                    break;
+                            }
+                        }
+                    }
+
+                    // Só adicionar se tem alguma quantidade (ou se não há filtro de quantidade)
+                    const hasQuantities = quantities.volume || quantities.area || quantities.length ||
+                        quantities.count || quantities.weight;
+
+                    if (hasQuantities || !filterQty) {
+                        // Sempre conta o elemento se passou pelo filtro de tipo
+                        if (!quantities.count && !filterQty) {
+                            quantities.count = 1; // Contar como 1 unidade se não há contagem explícita
+                        }
+
+                        quantificationResults.elements.push(quantities);
+
+                        // Agregar totais
+                        quantificationResults.totals.volume += quantities.volume;
+                        quantificationResults.totals.area += quantities.area;
+                        quantificationResults.totals.length += quantities.length;
+                        quantificationResults.totals.count += quantities.count || 1;
+                        quantificationResults.totals.weight += quantities.weight;
+
+                        // Agrupar por tipo
+                        if (!quantificationResults.byType.has(ifcType)) {
+                            quantificationResults.byType.set(ifcType, {
+                                elements: [],
+                                totals: { volume: 0, area: 0, length: 0, count: 0, weight: 0 }
+                            });
+                        }
+                        const typeGroup = quantificationResults.byType.get(ifcType);
+                        typeGroup.elements.push(quantities);
+                        typeGroup.totals.volume += quantities.volume;
+                        typeGroup.totals.area += quantities.area;
+                        typeGroup.totals.length += quantities.length;
+                        typeGroup.totals.count += quantities.count || 1;
+                        typeGroup.totals.weight += quantities.weight;
+                    }
+
+                } catch (e) {
+                    // Ignorar erros em elementos individuais
+                }
+
+                processed++;
+                if (processed % 100 === 0) {
+                    showLoading(`Processando elementos... ${processed}/${meshes.length}`,
+                        (processed / meshes.length) * 100);
+                }
+            }
+
+            hideLoading();
+            updateQuantificationUI();
+            log(`Quantificação completa: ${quantificationResults.elements.length} elementos`, 'success');
+        }
+
+        // Atualizar UI com resultados
+        function updateQuantificationUI() {
+            const totals = quantificationResults.totals;
+
+            // Atualizar totais no painel
+            const volEl = document.getElementById('total-volume');
+            volEl.textContent = totals.volume > 0 ? `${totals.volume.toFixed(2)} m³` : '-';
+            volEl.classList.toggle('zero', totals.volume === 0);
+
+            const areaEl = document.getElementById('total-area');
+            areaEl.textContent = totals.area > 0 ? `${totals.area.toFixed(2)} m²` : '-';
+            areaEl.classList.toggle('zero', totals.area === 0);
+
+            const lenEl = document.getElementById('total-length');
+            lenEl.textContent = totals.length > 0 ? `${totals.length.toFixed(2)} m` : '-';
+            lenEl.classList.toggle('zero', totals.length === 0);
+
+            const countEl = document.getElementById('total-count');
+            countEl.textContent = totals.count > 0 ? `${Math.round(totals.count)} un` : '-';
+            countEl.classList.toggle('zero', totals.count === 0);
+
+            const weightEl = document.getElementById('total-weight');
+            weightEl.textContent = totals.weight > 0 ? `${totals.weight.toFixed(2)} kg` : '-';
+            weightEl.classList.toggle('zero', totals.weight === 0);
+
+            // Habilitar botões
+            const hasResults = quantificationResults.elements.length > 0;
+            document.getElementById('btn-view-details').disabled = !hasResults;
+            document.getElementById('btn-export-csv').disabled = !hasResults;
+        }
+
+        // Abrir modal de detalhes
+        function openQuantificationModal() {
+            const modal = document.getElementById('quantification-modal');
+            const tbody = document.getElementById('quantification-table-body');
+            const summary = document.getElementById('quantification-summary-text');
+
+            tbody.innerHTML = '';
+
+            // Resumo
+            summary.textContent = `${quantificationResults.elements.length} elementos | ` +
+                `${quantificationResults.byType.size} tipos`;
+
+            // Renderizar tabela agrupada por tipo
+            quantificationResults.byType.forEach((group, ifcType) => {
+                // Header do tipo
+                const headerRow = document.createElement('tr');
+                headerRow.className = 'type-header';
+                headerRow.innerHTML = `
+                    <td colspan="7">${ifcType} (${group.elements.length} elementos)</td>
+                `;
+                tbody.appendChild(headerRow);
+
+                // Elementos do tipo
+                for (const elem of group.elements) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>#${elem.expressID}</td>
+                        <td>${elem.ifcType}</td>
+                        <td>${elem.name}</td>
+                        <td class="number">${elem.volume > 0 ? elem.volume.toFixed(4) : '-'}</td>
+                        <td class="number">${elem.area > 0 ? elem.area.toFixed(4) : '-'}</td>
+                        <td class="number">${elem.length > 0 ? elem.length.toFixed(4) : '-'}</td>
+                        <td class="number">${elem.weight > 0 ? elem.weight.toFixed(4) : '-'}</td>
+                    `;
+                    // Clicar na linha seleciona o elemento
+                    row.style.cursor = 'pointer';
+                    row.addEventListener('click', () => highlightQuantificationElement(elem.mesh));
+                    tbody.appendChild(row);
+                }
+
+                // Subtotal do tipo
+                const subtotalRow = document.createElement('tr');
+                subtotalRow.className = 'subtotal';
+                subtotalRow.innerHTML = `
+                    <td colspan="3">Subtotal ${ifcType}</td>
+                    <td class="number">${group.totals.volume > 0 ? group.totals.volume.toFixed(2) : '-'}</td>
+                    <td class="number">${group.totals.area > 0 ? group.totals.area.toFixed(2) : '-'}</td>
+                    <td class="number">${group.totals.length > 0 ? group.totals.length.toFixed(2) : '-'}</td>
+                    <td class="number">${group.totals.weight > 0 ? group.totals.weight.toFixed(2) : '-'}</td>
+                `;
+                tbody.appendChild(subtotalRow);
+            });
+
+            // Total geral
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'grand-total';
+            totalRow.innerHTML = `
+                <td colspan="3">TOTAL GERAL</td>
+                <td class="number">${quantificationResults.totals.volume.toFixed(2)} m³</td>
+                <td class="number">${quantificationResults.totals.area.toFixed(2)} m²</td>
+                <td class="number">${quantificationResults.totals.length.toFixed(2)} m</td>
+                <td class="number">${quantificationResults.totals.weight.toFixed(2)} kg</td>
+            `;
+            tbody.appendChild(totalRow);
+
+            modal.classList.add('active');
+        }
+
+        // Fechar modal de quantificação
+        function closeQuantificationModal() {
+            document.getElementById('quantification-modal').classList.remove('active');
+        }
+
+        // Destacar elemento na cena (a partir da tabela de quantificação)
+        function highlightQuantificationElement(mesh) {
+            if (!mesh) return;
+
+            // Limpar seleção anterior
+            clearSelection(false);
+
+            // Selecionar novo elemento
+            selectedMesh = mesh;
+            originalMaterial = mesh.material;
+            mesh.material = selectionMaterial;
+
+            // Centralizar câmera
+            const box = new THREE.Box3().setFromObject(mesh);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            controls.target.copy(center);
+            controls.update();
+        }
+
+        // Exportar para CSV
+        function exportQuantificationCSV() {
+            if (quantificationResults.elements.length === 0) {
+                log('Nenhum dado para exportar', 'warning');
+                return;
+            }
+
+            // Cabeçalho
+            let csv = 'ID;Tipo IFC;Nome;Volume (m³);Área (m²);Comprimento (m);Contagem;Peso (kg)\n';
+
+            // Dados por elemento agrupados por tipo
+            quantificationResults.byType.forEach((group, ifcType) => {
+                for (const elem of group.elements) {
+                    csv += `${elem.expressID};${elem.ifcType};"${elem.name}";`;
+                    csv += `${elem.volume.toFixed(4)};${elem.area.toFixed(4)};`;
+                    csv += `${elem.length.toFixed(4)};${Math.round(elem.count)};${elem.weight.toFixed(4)}\n`;
+                }
+                // Subtotal
+                csv += `;SUBTOTAL ${ifcType};;${group.totals.volume.toFixed(2)};`;
+                csv += `${group.totals.area.toFixed(2)};${group.totals.length.toFixed(2)};`;
+                csv += `${Math.round(group.totals.count)};${group.totals.weight.toFixed(2)}\n`;
+            });
+
+            // Total geral
+            csv += `;TOTAL GERAL;;${quantificationResults.totals.volume.toFixed(2)};`;
+            csv += `${quantificationResults.totals.area.toFixed(2)};`;
+            csv += `${quantificationResults.totals.length.toFixed(2)};`;
+            csv += `${Math.round(quantificationResults.totals.count)};`;
+            csv += `${quantificationResults.totals.weight.toFixed(2)}\n`;
+
+            // Criar download (com BOM para Excel)
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const date = new Date().toISOString().slice(0, 10);
+            const safeModelName = modelName.replace(/[^a-zA-Z0-9]/g, '_');
+            a.download = `quantificacao_${safeModelName}_${date}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            log('CSV exportado com sucesso', 'success');
+        }
+
+        // ==================== FIM QUANTIFICAÇÃO ====================
+
         // Carregar IFC de URL
         async function loadIFCFromURL(url, name) {
             if (!ifcAPI) {
@@ -2246,6 +2830,7 @@
                 document.getElementById('clipping-panel').classList.add('active');
                 document.getElementById('measure-panel').classList.add('active');
                 document.getElementById('views-panel').classList.add('active');
+                document.getElementById('quantification-panel').classList.add('active');
                 updateModelBounds();
 
                 // Construir mapa de propriedades IFC (para extração completa)
@@ -2418,6 +3003,7 @@
                 document.getElementById('clipping-panel').classList.add('active');
                 document.getElementById('measure-panel').classList.add('active');
                 document.getElementById('views-panel').classList.add('active');
+                document.getElementById('quantification-panel').classList.add('active');
                 updateModelBounds();
 
                 // Propriedades já foram indexadas durante o carregamento de cada modelo
@@ -3312,6 +3898,26 @@
         document.getElementById('properties-modal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closePropertiesModal();
+            }
+        });
+
+        // Event listeners de Quantificação
+        document.getElementById('filter-ifc-type').addEventListener('change', (e) => {
+            quantificationFilter.ifcType = e.target.value || null;
+        });
+        document.getElementById('filter-quantity-type').addEventListener('change', (e) => {
+            quantificationFilter.quantityType = e.target.value || null;
+        });
+        document.getElementById('btn-calc-quantification').addEventListener('click', calculateQuantification);
+        document.getElementById('btn-view-details').addEventListener('click', openQuantificationModal);
+        document.getElementById('btn-export-csv').addEventListener('click', exportQuantificationCSV);
+        document.getElementById('btn-export-csv-modal').addEventListener('click', exportQuantificationCSV);
+        document.getElementById('btn-close-quantification').addEventListener('click', closeQuantificationModal);
+        document.getElementById('btn-close-quantification-footer').addEventListener('click', closeQuantificationModal);
+        // Fechar modal de quantificação ao clicar fora
+        document.getElementById('quantification-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQuantificationModal();
             }
         });
 
