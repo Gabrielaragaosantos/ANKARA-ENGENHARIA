@@ -1464,6 +1464,9 @@
         let meshParameterCache = new Map();           // expressID → Map<"setName|propName", value>
         let meshTypeCache = new Map();                // expressID → {ifcType, elementName, modelID}
 
+        // OTIMIZAÇÃO 4 - Cache de relações pré-carregadas (para modelos federados)
+        let modelRelationDataCache = new Map();       // modelID → Map<relID, relationObject>
+
         // Logger
         function log(msg, type = 'info') {
             const debug = document.getElementById('debug');
@@ -1942,11 +1945,12 @@
             return result;
         }
 
-        // OTIMIZAÇÃO 2.3: Construir índice rápido de relações (sem processar propriedades)
-        // Isso é muito mais rápido que buildPropertyMaps() - apenas mapeia elementID → [relationIDs]
+        // OTIMIZAÇÃO 2.3 + 4.3: Construir índice rápido de relações COM pré-carregamento de dados
+        // Isso é muito mais rápido que buildPropertyMaps() - mapeia elementID → [relationIDs]
+        // FASE 4: Também pré-carrega os dados das relações para evitar GetLine() repetido
         async function buildRelationIndex(WebIFC, modelID = null) {
             const targetModelID = modelID ?? currentModelID;
-            log('Construindo índice de relações IFC (modo lazy)...', 'info');
+            log('Construindo índice de relações IFC (modo lazy + pré-cache)...', 'info');
             const startTime = Date.now();
 
             // Limpar índices anteriores se for modelo principal
@@ -1959,15 +1963,21 @@
             const localPropertyIndex = modelID ? new Map() : propertyRelationIndex;
             const localTypeIndex = modelID ? new Map() : typeRelationIndex;
 
-            // 1. Indexar IFCRELDEFINESBYPROPERTIES (apenas IDs, sem processar conteúdo)
+            // OTIMIZAÇÃO 4.3: Cache de dados das relações (pré-carregamento)
+            const relationDataCache = new Map();
+
+            // 1. Indexar IFCRELDEFINESBYPROPERTIES E pré-carregar dados
             try {
                 const relDefinesByPropsIDs = ifcAPI.GetLineIDsWithType(targetModelID, WebIFC.IFCRELDEFINESBYPROPERTIES);
                 for (let i = 0; i < relDefinesByPropsIDs.size(); i++) {
                     const relID = relDefinesByPropsIDs.get(i);
                     try {
-                        // Carregar relação com geometria básica apenas
-                        const rel = ifcAPI.GetLine(targetModelID, relID, false);
+                        // OTIMIZAÇÃO 4.3: Carregar com dados completos (true) e cachear
+                        const rel = ifcAPI.GetLine(targetModelID, relID, true);
                         if (!rel || !rel.RelatedObjects) continue;
+
+                        // Cachear a relação completa para uso posterior
+                        relationDataCache.set(relID, rel);
 
                         const relatedObjects = rel.RelatedObjects;
                         if (!Array.isArray(relatedObjects)) continue;
@@ -1985,14 +1995,18 @@
                 log(`Erro ao indexar IFCRELDEFINESBYPROPERTIES: ${e.message}`, 'warning');
             }
 
-            // 2. Indexar IFCRELDEFINESBYTYPE (apenas IDs)
+            // 2. Indexar IFCRELDEFINESBYTYPE E pré-carregar dados
             try {
                 const relDefinesByTypeIDs = ifcAPI.GetLineIDsWithType(targetModelID, WebIFC.IFCRELDEFINESBYTYPE);
                 for (let i = 0; i < relDefinesByTypeIDs.size(); i++) {
                     const relID = relDefinesByTypeIDs.get(i);
                     try {
-                        const rel = ifcAPI.GetLine(targetModelID, relID, false);
+                        // OTIMIZAÇÃO 4.3: Carregar com dados completos e cachear
+                        const rel = ifcAPI.GetLine(targetModelID, relID, true);
                         if (!rel || !rel.RelatedObjects) continue;
+
+                        // Cachear a relação completa
+                        relationDataCache.set(relID, rel);
 
                         const relatedObjects = rel.RelatedObjects;
                         if (!Array.isArray(relatedObjects)) continue;
@@ -2018,12 +2032,15 @@
                 });
             }
 
+            // OTIMIZAÇÃO 4.3: Salvar cache de dados das relações
+            modelRelationDataCache.set(targetModelID, relationDataCache);
+
             const elapsed = Date.now() - startTime;
             const totalElements = localPropertyIndex.size + localTypeIndex.size;
-            log(`✓ Índice de relações construído: ${totalElements} elementos indexados em ${elapsed}ms`, 'success');
+            log(`✓ Índice de relações construído: ${totalElements} elementos, ${relationDataCache.size} relações cacheadas em ${elapsed}ms`, 'success');
         }
 
-        // OTIMIZAÇÃO 2.3: Carregar propriedades on-demand para um elemento específico
+        // OTIMIZAÇÃO 2.3 + 4.3: Carregar propriedades on-demand usando cache de relações
         async function loadPropertiesOnDemand(expressID, WebIFC, modelID = null) {
             const targetModelID = modelID ?? currentModelID;
 
@@ -2052,11 +2069,15 @@
                 return; // Já carregado
             }
 
+            // OTIMIZAÇÃO 4.3: Obter cache de relações pré-carregadas
+            const relationDataCache = modelRelationDataCache.get(targetModelID);
+
             // Carregar propriedades das relações indexadas
             const relationIDs = localPropertyIndex.get(expressID) || [];
             for (const relID of relationIDs) {
                 try {
-                    const rel = ifcAPI.GetLine(targetModelID, relID, true);
+                    // OTIMIZAÇÃO 4.3: Usar cache se disponível, senão fallback para GetLine
+                    const rel = relationDataCache?.get(relID) || ifcAPI.GetLine(targetModelID, relID, true);
                     if (!rel) continue;
 
                     const propertyDef = rel.RelatingPropertyDefinition;
@@ -2090,7 +2111,8 @@
             const typeRelIDs = localTypeIndex.get(expressID) || [];
             for (const relID of typeRelIDs) {
                 try {
-                    const rel = ifcAPI.GetLine(targetModelID, relID, true);
+                    // OTIMIZAÇÃO 4.3: Usar cache se disponível
+                    const rel = relationDataCache?.get(relID) || ifcAPI.GetLine(targetModelID, relID, true);
                     if (!rel) continue;
 
                     const relatingType = rel.RelatingType;
@@ -2824,18 +2846,31 @@
             cachedMeshList = null;
             meshParameterCache.clear();
             meshTypeCache.clear();
+            modelRelationDataCache.clear();  // OTIMIZAÇÃO 4.3: Limpar cache de relações também
             discoveredParameters = [];
             log('Caches de quantificação limpos', 'info');
         }
 
+        // OTIMIZAÇÃO 4.2: BATCH_SIZE adaptativo baseado no cenário
+        function getOptimalBatchSize() {
+            const modelCount = modelPropertyMaps.size || 1;
+            const meshCount = cachedMeshList?.length || 0;
+
+            if (modelCount >= 3) return 25;       // Federado 3+ modelos: menor contención
+            if (modelCount >= 2) return 35;       // Federado 2 modelos
+            if (meshCount > 5000) return 75;      // Modelo grande único
+            return 50;                            // Default
+        }
+
         // Descobrir todos os parâmetros numéricos disponíveis no modelo
-        // OTIMIZAÇÃO 3: Agora popula meshParameterCache e meshTypeCache durante a descoberta
+        // OTIMIZAÇÃO 3 + 4: Popula caches durante a descoberta com processamento otimizado
         async function discoverAvailableParameters() {
             if (!currentModel) {
                 log('Nenhum modelo carregado', 'warning');
                 return [];
             }
 
+            const startTime = performance.now();
             log('Descobrindo parâmetros disponíveis...', 'info');
             showLoading('Analisando parâmetros do modelo...', 0);
 
@@ -2849,7 +2884,10 @@
             meshParameterCache.clear();
             meshTypeCache.clear();
 
-            const BATCH_SIZE = 50;
+            // OTIMIZAÇÃO 4.2: Usar BATCH_SIZE adaptativo
+            const BATCH_SIZE = getOptimalBatchSize();
+            const modelCount = modelPropertyMaps.size || 1;
+            log(`Batch size: ${BATCH_SIZE} (${modelCount} modelo(s), ${meshes.length} meshes)`, 'info');
             let processed = 0;
 
             // OTIMIZAÇÃO 3.3: Processar em batches paralelos
@@ -2954,7 +2992,8 @@
             // Converter para array e ordenar por quantidade de ocorrências
             discoveredParameters = Array.from(parameterMap.values()).sort((a, b) => b.count - a.count);
 
-            log(`✓ Descobertos ${discoveredParameters.length} parâmetros numéricos (${meshParameterCache.size} meshes cacheados)`, 'success');
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+            log(`✓ Descobertos ${discoveredParameters.length} parâmetros numéricos (${meshParameterCache.size} meshes, ${elapsed}s)`, 'success');
             return discoveredParameters;
         }
 
