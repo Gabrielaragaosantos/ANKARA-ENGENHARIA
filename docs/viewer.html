@@ -167,6 +167,48 @@
             margin-top: 8px;
         }
 
+        /* Loading detalhado com etapas */
+        .loading-steps {
+            margin-top: 15px;
+            text-align: left;
+            font-size: 12px;
+        }
+        .loading-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            color: var(--cor-text-muted);
+            transition: color 0.3s;
+        }
+        .loading-step.active {
+            color: var(--cor-accent);
+        }
+        .loading-step.completed {
+            color: #4CAF50;
+        }
+        .loading-step-icon {
+            width: 18px;
+            text-align: center;
+        }
+        .loading-step.pending .loading-step-icon::before { content: '○'; }
+        .loading-step.active .loading-step-icon::before { content: '◉'; }
+        .loading-step.completed .loading-step-icon::before { content: '✓'; }
+        .loading-time {
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--cor-text-muted);
+        }
+        .loading-cache-badge {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            margin-left: 8px;
+        }
+
         #info-panel {
             background: var(--cor-panel);
             padding: 15px;
@@ -1023,6 +1065,11 @@
                 <p id="info-elements">-</p>
                 <p id="info-size">-</p>
             </div>
+            <div id="cache-panel" style="background: var(--cor-panel); padding: 10px; border-radius: 8px; margin-top: 10px; border-left: 3px solid #4CAF50;">
+                <h4 style="color: #4CAF50; margin-bottom: 8px; font-size: 13px;">💾 Cache de Modelos</h4>
+                <p id="cache-info" style="font-size: 11px; color: var(--cor-text-muted);">Carregando...</p>
+                <button id="btn-clear-cache" class="btn" style="background: #c62828; margin-top: 8px; padding: 8px; font-size: 11px; width: 100%;">🗑️ Limpar Cache</button>
+            </div>
             <div id="selection-panel">
                 <h3>🎯 Elemento Selecionado</h3>
                 <p><span class="label">ID:</span> <span class="value" id="sel-id">-</span></p>
@@ -1209,6 +1256,25 @@
                     <div class="progress-bar" id="progress-bar"></div>
                 </div>
                 <p class="progress-text" id="progress-text">0%</p>
+                <div class="loading-steps" id="loading-steps">
+                    <div class="loading-step pending" id="step-cache">
+                        <span class="loading-step-icon"></span>
+                        <span>Verificando cache local...</span>
+                    </div>
+                    <div class="loading-step pending" id="step-download">
+                        <span class="loading-step-icon"></span>
+                        <span id="step-download-text">Baixando modelo...</span>
+                    </div>
+                    <div class="loading-step pending" id="step-geometry">
+                        <span class="loading-step-icon"></span>
+                        <span id="step-geometry-text">Processando geometrias...</span>
+                    </div>
+                    <div class="loading-step pending" id="step-properties">
+                        <span class="loading-step-icon"></span>
+                        <span>Indexando propriedades IFC...</span>
+                    </div>
+                </div>
+                <div class="loading-time" id="loading-time"></div>
             </div>
         </div>
     </div>
@@ -1358,6 +1424,14 @@
         const measureMaterial = new THREE.LineBasicMaterial({ color: 0xFFEB3B, linewidth: 2 });
         const measureSphereMaterial = new THREE.MeshBasicMaterial({ color: 0xFFEB3B });
 
+        // ==================== CACHE E OTIMIZAÇÕES ====================
+        const IFC_CACHE_DB_NAME = 'IFCModelCache';
+        const IFC_CACHE_STORE_NAME = 'models';
+        const IFC_CACHE_VERSION = 1;
+        let loadingStartTime = null;
+        let materialCache = new Map();  // Cache de materiais por cor: "r,g,b,a" → material
+
+        // ==================== QUANTIFICAÇÃO ====================
         // Quantificação para orçamento
         let quantificationResults = {
             elements: [],      // Lista de elementos com quantidades
@@ -1395,10 +1469,164 @@
                 document.getElementById('progress-bar').style.width = progress + '%';
                 document.getElementById('progress-text').textContent = Math.round(progress) + '%';
             }
+            // Atualizar tempo decorrido
+            if (loadingStartTime) {
+                const elapsed = ((Date.now() - loadingStartTime) / 1000).toFixed(1);
+                document.getElementById('loading-time').textContent = `Tempo: ${elapsed}s`;
+            }
         }
 
         function hideLoading() {
             document.getElementById('loading').classList.remove('active');
+            // Reset dos steps
+            ['step-cache', 'step-download', 'step-geometry', 'step-properties'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.className = 'loading-step pending';
+                }
+            });
+            document.getElementById('loading-time').textContent = '';
+        }
+
+        // Atualizar estado de uma etapa do loading
+        function setLoadingStep(stepId, state) {
+            const el = document.getElementById(stepId);
+            if (el) {
+                el.className = `loading-step ${state}`;  // pending, active, completed
+            }
+        }
+
+        // ==================== INDEXEDDB CACHE ====================
+        // Abre ou cria o banco de dados IndexedDB para cache
+        async function openCacheDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(IFC_CACHE_DB_NAME, IFC_CACHE_VERSION);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(IFC_CACHE_STORE_NAME)) {
+                        const store = db.createObjectStore(IFC_CACHE_STORE_NAME, { keyPath: 'url' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+            });
+        }
+
+        // Busca um modelo no cache por URL
+        async function getCachedModel(url) {
+            try {
+                const db = await openCacheDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([IFC_CACHE_STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(IFC_CACHE_STORE_NAME);
+                    const request = store.get(url);
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                });
+            } catch (error) {
+                console.warn('Erro ao acessar cache:', error);
+                return null;
+            }
+        }
+
+        // Salva um modelo no cache
+        async function cacheModel(url, data, modelName) {
+            try {
+                const db = await openCacheDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([IFC_CACHE_STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(IFC_CACHE_STORE_NAME);
+                    const record = {
+                        url: url,
+                        data: data,
+                        name: modelName,
+                        size: data.length,
+                        timestamp: Date.now()
+                    };
+                    const request = store.put(record);
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve();
+                });
+            } catch (error) {
+                console.warn('Erro ao salvar no cache:', error);
+            }
+        }
+
+        // Limpa todo o cache de modelos
+        async function clearModelCache() {
+            try {
+                const db = await openCacheDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([IFC_CACHE_STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(IFC_CACHE_STORE_NAME);
+                    const request = store.clear();
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        log('Cache de modelos limpo', 'success');
+                        resolve();
+                    };
+                });
+            } catch (error) {
+                console.warn('Erro ao limpar cache:', error);
+            }
+        }
+
+        // Retorna informações sobre o cache
+        async function getCacheInfo() {
+            try {
+                const db = await openCacheDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([IFC_CACHE_STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(IFC_CACHE_STORE_NAME);
+                    const request = store.getAll();
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        const records = request.result;
+                        const totalSize = records.reduce((acc, r) => acc + (r.size || 0), 0);
+                        resolve({
+                            count: records.length,
+                            totalSize: totalSize,
+                            models: records.map(r => ({ name: r.name, size: r.size, timestamp: r.timestamp }))
+                        });
+                    };
+                });
+            } catch (error) {
+                return { count: 0, totalSize: 0, models: [] };
+            }
+        }
+
+        // ==================== MATERIAL CACHING ====================
+        // Obtém ou cria material com cache por cor
+        function getOrCreateMaterial(r, g, b, a) {
+            // Criar chave com precisão de 3 casas decimais para evitar duplicatas
+            const key = `${r.toFixed(3)},${g.toFixed(3)},${b.toFixed(3)},${a.toFixed(3)}`;
+
+            if (materialCache.has(key)) {
+                return materialCache.get(key);
+            }
+
+            const mat = new THREE.MeshPhongMaterial({
+                color: new THREE.Color(r, g, b),
+                opacity: a,
+                transparent: a < 1,
+                side: THREE.DoubleSide
+            });
+
+            materialCache.set(key, mat);
+            return mat;
+        }
+
+        // Limpa o cache de materiais
+        function clearMaterialCache() {
+            materialCache.forEach(mat => mat.dispose());
+            materialCache.clear();
         }
 
         // Obter parâmetros da URL
@@ -2783,7 +3011,7 @@
 
         // ==================== FIM QUANTIFICAÇÃO ====================
 
-        // Carregar IFC de URL
+        // Carregar IFC de URL (com cache IndexedDB e material caching)
         async function loadIFCFromURL(url, name) {
             if (!ifcAPI) {
                 alert('Motor IFC não inicializado. Recarregue a página.');
@@ -2791,70 +3019,128 @@
             }
 
             try {
+                // Iniciar timer
+                loadingStartTime = Date.now();
+                clearMaterialCache();  // Limpar cache de materiais anterior
+
                 modelName = name;
                 document.getElementById('model-name').textContent = name;
                 document.title = `${name} - Visualizador IFC`;
 
-                log(`Baixando: ${name}`, 'info');
-                showLoading('Baixando modelo...', 30);
+                log(`Carregando: ${name}`, 'info');
+                showLoading('Iniciando carregamento...', 5);
 
-                // Usar proxy para URLs do GitHub (evitar CORS)
-                let fetchUrl = url;
-                if (url.includes('github.com') || url.includes('githubusercontent.com')) {
-                    fetchUrl = CORS_PROXY + encodeURIComponent(url);
-                    log('Usando proxy CORS...', 'info');
-                }
+                // ========== ETAPA 1: VERIFICAR CACHE ==========
+                setLoadingStep('step-cache', 'active');
+                showLoading('Verificando cache local...', 10);
 
-                // Baixar o arquivo IFC
-                const response = await fetch(fetchUrl);
-                if (!response.ok) {
-                    throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
-                }
+                let data = null;
+                let loadedFromCache = false;
 
-                const contentLength = response.headers.get('content-length');
-                const total = contentLength ? parseInt(contentLength, 10) : 0;
-                let loaded = 0;
+                const cachedModel = await getCachedModel(url);
+                if (cachedModel && cachedModel.data) {
+                    // Modelo encontrado no cache!
+                    data = new Uint8Array(cachedModel.data);
+                    loadedFromCache = true;
+                    log(`✓ Modelo carregado do cache (${(data.length / 1024 / 1024).toFixed(2)} MB)`, 'success');
+                    setLoadingStep('step-cache', 'completed');
 
-                const reader = response.body.getReader();
-                const chunks = [];
+                    // Pular etapa de download
+                    setLoadingStep('step-download', 'completed');
+                    document.getElementById('step-download-text').innerHTML = 'Download (cache) <span class="loading-cache-badge">CACHE</span>';
+                    showLoading('Carregado do cache!', 50);
+                } else {
+                    log('Modelo não encontrado no cache, baixando...', 'info');
+                    setLoadingStep('step-cache', 'completed');
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    chunks.push(value);
-                    loaded += value.length;
-                    if (total > 0) {
-                        const progress = 30 + (loaded / total) * 40;
-                        showLoading(`Baixando... (${(loaded / 1024 / 1024).toFixed(1)} MB)`, progress);
+                    // ========== ETAPA 2: DOWNLOAD ==========
+                    setLoadingStep('step-download', 'active');
+                    document.getElementById('step-download-text').textContent = 'Baixando modelo...';
+                    showLoading('Baixando modelo...', 15);
+
+                    // Usar proxy para URLs do GitHub (evitar CORS)
+                    let fetchUrl = url;
+                    if (url.includes('github.com') || url.includes('githubusercontent.com')) {
+                        fetchUrl = CORS_PROXY + encodeURIComponent(url);
+                        log('Usando proxy CORS...', 'info');
                     }
+
+                    // Baixar o arquivo IFC
+                    const response = await fetch(fetchUrl);
+                    if (!response.ok) {
+                        throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
+                    }
+
+                    const contentLength = response.headers.get('content-length');
+                    const total = contentLength ? parseInt(contentLength, 10) : 0;
+                    let loaded = 0;
+
+                    const reader = response.body.getReader();
+                    const chunks = [];
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        loaded += value.length;
+                        if (total > 0) {
+                            const progress = 15 + (loaded / total) * 35;
+                            const mbLoaded = (loaded / 1024 / 1024).toFixed(1);
+                            const mbTotal = (total / 1024 / 1024).toFixed(1);
+                            document.getElementById('step-download-text').textContent = `Baixando... ${mbLoaded}/${mbTotal} MB`;
+                            showLoading(`Baixando... (${mbLoaded} MB)`, progress);
+                        }
+                    }
+
+                    data = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+                    let offset = 0;
+                    for (const chunk of chunks) {
+                        data.set(chunk, offset);
+                        offset += chunk.length;
+                    }
+
+                    log(`✓ Download concluído: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'success');
+                    setLoadingStep('step-download', 'completed');
+                    document.getElementById('step-download-text').textContent = `Download concluído (${(data.length / 1024 / 1024).toFixed(1)} MB)`;
+
+                    // Salvar no cache para uso futuro (em background)
+                    cacheModel(url, data, name).then(() => {
+                        log('Modelo salvo no cache para carregamento rápido futuro', 'info');
+                    }).catch(err => {
+                        console.warn('Não foi possível salvar no cache:', err);
+                    });
                 }
 
-                const data = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-                let offset = 0;
-                for (const chunk of chunks) {
-                    data.set(chunk, offset);
-                    offset += chunk.length;
-                }
-
-                log(`Arquivo baixado: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'success');
-                showLoading('Processando IFC...', 75);
+                // ========== ETAPA 3: PROCESSAMENTO DE GEOMETRIAS ==========
+                setLoadingStep('step-geometry', 'active');
+                showLoading('Processando geometrias...', 55);
 
                 const modelID = ifcAPI.OpenModel(data);
                 currentModelID = modelID;
                 log(`Modelo aberto (ID: ${modelID})`, 'success');
 
-                showLoading('Gerando geometrias...', 85);
-
                 const modelGroup = new THREE.Group();
                 let meshCount = 0;
+                let processedMeshes = 0;
                 meshToExpressID.clear();
 
+                // Contar total de meshes primeiro (aproximado)
+                let totalGeoms = 0;
                 ifcAPI.StreamAllMeshes(modelID, (mesh) => {
-                    const expressID = mesh.expressID;  // ID do elemento IFC
+                    totalGeoms += mesh.geometries.size();
+                });
+
+                // Reabrir o modelo para processar
+                ifcAPI.CloseModel(modelID);
+                const modelID2 = ifcAPI.OpenModel(data);
+                currentModelID = modelID2;
+
+                ifcAPI.StreamAllMeshes(modelID2, (mesh) => {
+                    const expressID = mesh.expressID;
                     const geoms = mesh.geometries;
                     for (let i = 0; i < geoms.size(); i++) {
                         const pg = geoms.get(i);
-                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
+                        const geom = ifcAPI.GetGeometry(modelID2, pg.geometryExpressID);
                         const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
                         const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
 
@@ -2877,29 +3163,34 @@
                             bufferGeom.setIndex(Array.from(iData));
                         }
 
+                        // OTIMIZAÇÃO: Usar cache de materiais
                         const c = pg.color;
-                        const mat = new THREE.MeshPhongMaterial({
-                            color: new THREE.Color(c.x, c.y, c.z),
-                            opacity: c.w,
-                            transparent: c.w < 1,
-                            side: THREE.DoubleSide
-                        });
+                        const mat = getOrCreateMaterial(c.x, c.y, c.z, c.w);
 
                         const threeMesh = new THREE.Mesh(bufferGeom, mat);
                         const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
                         threeMesh.applyMatrix4(matrix);
 
-                        // Mapear mesh para expressID do elemento IFC
                         meshToExpressID.set(threeMesh, expressID);
 
                         modelGroup.add(threeMesh);
                         meshCount++;
+                        processedMeshes++;
                         geom.delete();
+
+                        // Atualizar progresso periodicamente
+                        if (processedMeshes % 100 === 0 && totalGeoms > 0) {
+                            const geomProgress = 55 + (processedMeshes / totalGeoms) * 30;
+                            document.getElementById('step-geometry-text').textContent = `Processando geometrias... (${processedMeshes}/${totalGeoms})`;
+                            showLoading(`Geometrias: ${processedMeshes}/${totalGeoms}`, geomProgress);
+                        }
                     }
                 });
 
-                log(`Gerados ${meshCount} meshes`, 'success');
-                showLoading('Finalizando...', 95);
+                log(`✓ Gerados ${meshCount} meshes (${materialCache.size} materiais únicos)`, 'success');
+                setLoadingStep('step-geometry', 'completed');
+                document.getElementById('step-geometry-text').textContent = `Geometrias processadas (${meshCount} meshes)`;
+                showLoading('Finalizando...', 90);
 
                 scene.add(modelGroup);
                 currentModel = modelGroup;
@@ -2929,15 +3220,21 @@
                 document.getElementById('quantification-panel').classList.add('active');
                 updateModelBounds();
 
-                // Construir mapa de propriedades IFC (para extração completa)
-                showLoading('Indexando propriedades IFC...', 98);
+                // ========== ETAPA 4: INDEXAÇÃO DE PROPRIEDADES ==========
+                setLoadingStep('step-properties', 'active');
+                showLoading('Indexando propriedades IFC...', 95);
+
                 const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
                 await buildPropertyMaps(WebIFC);
 
-                // NÃO fechar o modelo para poder acessar propriedades depois
-                // ifcAPI.CloseModel(modelID);
+                setLoadingStep('step-properties', 'completed');
+
+                // Calcular tempo total
+                const totalTime = ((Date.now() - loadingStartTime) / 1000).toFixed(1);
+                const cacheMsg = loadedFromCache ? ' (do cache)' : '';
+                log(`✓ Modelo carregado com sucesso em ${totalTime}s${cacheMsg}!`, 'success');
+
                 hideLoading();
-                log('Modelo carregado com sucesso!', 'success');
 
             } catch (error) {
                 log(`ERRO: ${error.message}`, 'error');
@@ -2956,6 +3253,10 @@
             }
 
             try {
+                // Iniciar timer e limpar cache de materiais
+                loadingStartTime = Date.now();
+                clearMaterialCache();
+
                 modelName = nomeFederado;
                 document.getElementById('model-name').textContent = `🔗 ${nomeFederado}`;
                 document.title = `${nomeFederado} - Visualizador IFC (Federado)`;
@@ -2968,6 +3269,7 @@
                 const mainGroup = new THREE.Group();
                 mainGroup.name = 'FederatedModels';
                 let totalMeshCount = 0;
+                let modelsFromCache = 0;
 
                 // Importar WebIFC uma vez para usar em todas as indexações
                 const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
@@ -2979,22 +3281,37 @@
                     showLoading(`Carregando ${modelo.nome}...`, (i / modelos.length) * 80);
 
                     try {
-                        // Usar proxy para URLs do GitHub
-                        let fetchUrl = modelo.url;
-                        if (modelo.url.includes('github.com') || modelo.url.includes('githubusercontent.com')) {
-                            fetchUrl = CORS_PROXY + encodeURIComponent(modelo.url);
+                        let data = null;
+
+                        // Verificar cache primeiro
+                        const cachedModel = await getCachedModel(modelo.url);
+                        if (cachedModel && cachedModel.data) {
+                            data = new Uint8Array(cachedModel.data);
+                            modelsFromCache++;
+                            log(`${modelo.nome}: carregado do cache (${(data.length / 1024 / 1024).toFixed(2)} MB)`, 'success');
+                        } else {
+                            // Usar proxy para URLs do GitHub
+                            let fetchUrl = modelo.url;
+                            if (modelo.url.includes('github.com') || modelo.url.includes('githubusercontent.com')) {
+                                fetchUrl = CORS_PROXY + encodeURIComponent(modelo.url);
+                            }
+
+                            // Baixar arquivo
+                            const response = await fetch(fetchUrl);
+                            if (!response.ok) {
+                                throw new Error(`Erro HTTP: ${response.status}`);
+                            }
+
+                            const arrayBuffer = await response.arrayBuffer();
+                            data = new Uint8Array(arrayBuffer);
+
+                            log(`${modelo.nome}: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'info');
+
+                            // Salvar no cache para uso futuro
+                            cacheModel(modelo.url, data, modelo.nome).catch(err => {
+                                console.warn('Não foi possível salvar no cache:', err);
+                            });
                         }
-
-                        // Baixar arquivo
-                        const response = await fetch(fetchUrl);
-                        if (!response.ok) {
-                            throw new Error(`Erro HTTP: ${response.status}`);
-                        }
-
-                        const arrayBuffer = await response.arrayBuffer();
-                        const data = new Uint8Array(arrayBuffer);
-
-                        log(`${modelo.nome}: ${(data.length / 1024 / 1024).toFixed(2)} MB`, 'info');
 
                         // Processar IFC
                         const modelID = ifcAPI.OpenModel(data);
@@ -3032,13 +3349,9 @@
                                     bufferGeom.setIndex(Array.from(iData));
                                 }
 
+                                // OTIMIZAÇÃO: Usar cache de materiais
                                 const c = pg.color;
-                                const mat = new THREE.MeshPhongMaterial({
-                                    color: new THREE.Color(c.x, c.y, c.z),
-                                    opacity: c.w,
-                                    transparent: c.w < 1,
-                                    side: THREE.DoubleSide
-                                });
+                                const mat = getOrCreateMaterial(c.x, c.y, c.z, c.w);
 
                                 const threeMesh = new THREE.Mesh(bufferGeom, mat);
                                 const matrix = new THREE.Matrix4().fromArray(pg.flatTransformation);
@@ -3104,8 +3417,12 @@
 
                 // Propriedades já foram indexadas durante o carregamento de cada modelo
 
+                // Calcular tempo total
+                const totalTime = ((Date.now() - loadingStartTime) / 1000).toFixed(1);
+                const cacheMsg = modelsFromCache > 0 ? ` (${modelsFromCache} do cache)` : '';
+
                 hideLoading();
-                log(`Federação completa! ${modelos.length} modelos, ${totalMeshCount} elementos`, 'success');
+                log(`✓ Federação completa em ${totalTime}s! ${modelos.length} modelos${cacheMsg}, ${totalMeshCount} elementos, ${materialCache.size} materiais únicos`, 'success');
 
             } catch (error) {
                 log(`ERRO na federação: ${error.message}`, 'error');
@@ -4021,12 +4338,36 @@
             }
         });
 
+        // Event listener do botão de limpar cache
+        document.getElementById('btn-clear-cache').addEventListener('click', async () => {
+            if (confirm('Deseja realmente limpar o cache de modelos?\n\nIsso fará com que os modelos precisem ser baixados novamente no próximo acesso.')) {
+                await clearModelCache();
+                updateCacheUI();
+                alert('Cache limpo com sucesso!');
+            }
+        });
+
+        // Função para atualizar UI do cache
+        async function updateCacheUI() {
+            try {
+                const info = await getCacheInfo();
+                const sizeInMB = (info.totalSize / 1024 / 1024).toFixed(1);
+                document.getElementById('cache-info').textContent =
+                    `${info.count} modelo(s) em cache (${sizeInMB} MB)`;
+            } catch (error) {
+                document.getElementById('cache-info').textContent = 'Cache não disponível';
+            }
+        }
+
         // Iniciar
         async function main() {
             log('Iniciando...', 'info');
             try {
                 initThreeJS();
                 await initWebIFC();
+
+                // Atualizar info do cache
+                updateCacheUI();
 
                 // Obter parâmetros da URL
                 const params = getUrlParams();
