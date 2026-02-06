@@ -1147,36 +1147,28 @@
                         <option value="IFCCOVERING">Revestimentos (IfcCovering)</option>
                     </select>
 
-                    <select id="filter-quantity-type">
-                        <option value="">📏 Todas as Quantidades</option>
-                        <option value="Volume">Volume (m³)</option>
-                        <option value="Área">Área (m²)</option>
-                        <option value="Comprimento">Comprimento (m)</option>
-                        <option value="Contagem">Contagem (un)</option>
-                        <option value="Peso">Peso (kg)</option>
-                    </select>
+                    <div style="margin-top: 8px;">
+                        <label style="font-size: 11px; color: var(--cor-text-muted); display: block; margin-bottom: 4px;">📊 Parâmetro a quantificar:</label>
+                        <select id="filter-parameter">
+                            <option value="">Clique em "Descobrir" primeiro</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-discover-params" class="btn btn-secondary" style="margin-top: 8px; font-size: 11px; padding: 8px;">🔍 Descobrir Parâmetros do Modelo</button>
                 </div>
 
                 <div class="quantification-totals" id="quantification-totals">
-                    <div class="total-row">
-                        <span class="label">📦 Volume Total:</span>
-                        <span class="value" id="total-volume">-</span>
+                    <div class="total-row" id="total-param-row" style="display: none;">
+                        <span class="label" id="total-param-label">Parâmetro:</span>
+                        <span class="value" id="total-param-value">-</span>
                     </div>
                     <div class="total-row">
-                        <span class="label">📐 Área Total:</span>
-                        <span class="value" id="total-area">-</span>
-                    </div>
-                    <div class="total-row">
-                        <span class="label">📏 Comprimento Total:</span>
-                        <span class="value" id="total-length">-</span>
-                    </div>
-                    <div class="total-row">
-                        <span class="label">🔢 Contagem:</span>
+                        <span class="label">🔢 Elementos:</span>
                         <span class="value" id="total-count">-</span>
                     </div>
-                    <div class="total-row">
-                        <span class="label">⚖️ Peso Total:</span>
-                        <span class="value" id="total-weight">-</span>
+                    <div class="total-row" id="total-sum-row" style="display: none;">
+                        <span class="label">📊 Total:</span>
+                        <span class="value" id="total-sum">-</span>
                     </div>
                 </div>
 
@@ -1380,8 +1372,10 @@
         };
         let quantificationFilter = {
             ifcType: null,           // Filtro por tipo IFC (null = todos)
-            quantityType: null       // Filtro por tipo de quantidade (null = todos)
+            parameter: null          // Parâmetro selecionado para quantificar (setName|propName)
         };
+        let discoveredParameters = [];  // Parâmetros descobertos no modelo
+        let selectedParameterInfo = null;  // Info do parâmetro selecionado {setName, propName, unit}
 
         // Logger
         function log(msg, type = 'info') {
@@ -2373,28 +2367,20 @@
 
         // ==================== QUANTIFICAÇÃO PARA ORÇAMENTO ====================
 
-        // Calcular quantificação de todos os elementos
-        async function calculateQuantification() {
+        // Descobrir todos os parâmetros numéricos disponíveis no modelo
+        async function discoverAvailableParameters() {
             if (!currentModel) {
                 log('Nenhum modelo carregado', 'warning');
-                return;
+                return [];
             }
 
-            log('Calculando quantificação...', 'info');
-            showLoading('Calculando quantificação...', 0);
-
-            // Resetar resultados
-            quantificationResults = {
-                elements: [],
-                totals: { volume: 0, area: 0, length: 0, count: 0, weight: 0 },
-                byType: new Map()
-            };
+            log('Descobrindo parâmetros disponíveis...', 'info');
+            showLoading('Analisando parâmetros do modelo...', 0);
 
             const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-            const filterType = quantificationFilter.ifcType;
-            const filterQty = quantificationFilter.quantityType;
+            const parameterMap = new Map(); // Map<"setName|propName", {info}>
 
-            // Iterar todos os meshes do modelo
+            // Coletar meshes
             const meshes = [];
             currentModel.traverse(child => {
                 if (child.isMesh && meshToExpressID.has(child)) {
@@ -2408,7 +2394,136 @@
                 const modelID = meshToModelID.get(mesh) ?? currentModelID;
 
                 try {
-                    // Obter elemento e tipo
+                    const props = getAllPropertiesForElement(expressID, WebIFC, modelID);
+
+                    // Processar QuantitySets
+                    for (const qset of props.quantitySets) {
+                        for (const prop of qset.properties) {
+                            const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                            if (!isNaN(numValue) && numValue !== 0) {
+                                const key = `${qset.name}|${prop.name}`;
+                                if (!parameterMap.has(key)) {
+                                    parameterMap.set(key, {
+                                        setName: qset.name,
+                                        propName: prop.name,
+                                        unit: prop.unit || '',
+                                        quantityType: prop.quantityType || null,
+                                        count: 0,
+                                        source: 'QuantitySet',
+                                        sampleValue: numValue
+                                    });
+                                }
+                                parameterMap.get(key).count++;
+                            }
+                        }
+                    }
+
+                    // Processar PropertySets
+                    for (const pset of props.propertySets) {
+                        for (const prop of pset.properties) {
+                            const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                            if (!isNaN(numValue) && numValue !== 0) {
+                                const key = `${pset.name}|${prop.name}`;
+                                if (!parameterMap.has(key)) {
+                                    parameterMap.set(key, {
+                                        setName: pset.name,
+                                        propName: prop.name,
+                                        unit: prop.unit || '',
+                                        quantityType: null,
+                                        count: 0,
+                                        source: 'PropertySet',
+                                        sampleValue: numValue
+                                    });
+                                }
+                                parameterMap.get(key).count++;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Ignorar erros
+                }
+
+                processed++;
+                if (processed % 50 === 0) {
+                    showLoading(`Analisando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
+                }
+            }
+
+            hideLoading();
+
+            // Converter para array e ordenar por quantidade de ocorrências
+            discoveredParameters = Array.from(parameterMap.values()).sort((a, b) => b.count - a.count);
+
+            log(`Descobertos ${discoveredParameters.length} parâmetros numéricos`, 'success');
+            return discoveredParameters;
+        }
+
+        // Popular dropdown de parâmetros
+        function populateParameterDropdown(params) {
+            const select = document.getElementById('filter-parameter');
+            select.innerHTML = '<option value="">Selecione um parâmetro</option>';
+
+            for (const p of params) {
+                const unitStr = p.unit ? ` [${p.unit}]` : '';
+                const sourceIcon = p.source === 'QuantitySet' ? '📦' : '📋';
+                const label = `${sourceIcon} ${p.propName} (${p.setName}) - ${p.count} elem.${unitStr}`;
+                const option = document.createElement('option');
+                option.value = `${p.setName}|${p.propName}`;
+                option.textContent = label;
+                option.dataset.unit = p.unit || '';
+                select.appendChild(option);
+            }
+        }
+
+        // Calcular quantificação baseada no parâmetro selecionado
+        async function calculateQuantification() {
+            if (!currentModel) {
+                log('Nenhum modelo carregado', 'warning');
+                return;
+            }
+
+            const selectedParam = document.getElementById('filter-parameter').value;
+            if (!selectedParam) {
+                log('Selecione um parâmetro para quantificar', 'warning');
+                alert('Por favor, clique em "Descobrir Parâmetros" e selecione um parâmetro para quantificar.');
+                return;
+            }
+
+            const [setName, propName] = selectedParam.split('|');
+
+            // Encontrar info do parâmetro selecionado
+            selectedParameterInfo = discoveredParameters.find(p => p.setName === setName && p.propName === propName);
+            if (!selectedParameterInfo) {
+                selectedParameterInfo = { setName, propName, unit: '' };
+            }
+
+            log(`Calculando: ${propName} (${setName})...`, 'info');
+            showLoading('Calculando quantificação...', 0);
+
+            // Resetar resultados
+            quantificationResults = {
+                elements: [],
+                totals: { total: 0, count: 0 },
+                byType: new Map()
+            };
+
+            const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+            const filterType = quantificationFilter.ifcType;
+
+            // Iterar meshes
+            const meshes = [];
+            currentModel.traverse(child => {
+                if (child.isMesh && meshToExpressID.has(child)) {
+                    meshes.push(child);
+                }
+            });
+
+            let processed = 0;
+            for (const mesh of meshes) {
+                const expressID = meshToExpressID.get(mesh);
+                const modelID = meshToModelID.get(mesh) ?? currentModelID;
+
+                try {
                     const element = ifcAPI.GetLine(modelID, expressID, true);
                     const ifcType = getIFCTypeName(element?.type);
 
@@ -2418,129 +2533,116 @@
                         continue;
                     }
 
-                    // Obter propriedades
                     const props = getAllPropertiesForElement(expressID, WebIFC, modelID);
                     const elementName = element?.Name?.value || element?.Name || '-';
 
-                    // Extrair quantidades
-                    const quantities = {
-                        expressID,
-                        modelID,
-                        ifcType,
-                        name: elementName,
-                        volume: 0,
-                        area: 0,
-                        length: 0,
-                        count: 0,
-                        weight: 0,
-                        mesh: mesh  // Referência para destaque visual
-                    };
+                    let foundValue = null;
 
-                    // Processar QuantitySets
+                    // Buscar em QuantitySets
                     for (const qset of props.quantitySets) {
+                        if (qset.name !== setName) continue;
                         for (const prop of qset.properties) {
-                            const value = typeof prop.value === 'number' ? prop.value : 0;
-
-                            // Filtrar por tipo de quantidade se especificado
-                            if (filterQty && prop.quantityType !== filterQty) {
-                                continue;
+                            if (prop.name !== propName) continue;
+                            const value = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                            if (!isNaN(value)) {
+                                foundValue = value;
+                                break;
                             }
+                        }
+                        if (foundValue !== null) break;
+                    }
 
-                            switch (prop.quantityType) {
-                                case 'Volume':
-                                    quantities.volume += value;
+                    // Buscar em PropertySets se não encontrou
+                    if (foundValue === null) {
+                        for (const pset of props.propertySets) {
+                            if (pset.name !== setName) continue;
+                            for (const prop of pset.properties) {
+                                if (prop.name !== propName) continue;
+                                const value = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                                if (!isNaN(value)) {
+                                    foundValue = value;
                                     break;
-                                case 'Área':
-                                    quantities.area += value;
-                                    break;
-                                case 'Comprimento':
-                                    quantities.length += value;
-                                    break;
-                                case 'Contagem':
-                                    quantities.count += value;
-                                    break;
-                                case 'Peso':
-                                    quantities.weight += value;
-                                    break;
+                                }
                             }
+                            if (foundValue !== null) break;
                         }
                     }
 
-                    // Só adicionar se tem alguma quantidade (ou se não há filtro de quantidade)
-                    const hasQuantities = quantities.volume || quantities.area || quantities.length ||
-                        quantities.count || quantities.weight;
+                    // Se encontrou valor, adicionar ao resultado
+                    if (foundValue !== null) {
+                        const elemData = {
+                            expressID,
+                            modelID,
+                            ifcType,
+                            name: elementName,
+                            value: foundValue,
+                            mesh: mesh
+                        };
 
-                    if (hasQuantities || !filterQty) {
-                        // Sempre conta o elemento se passou pelo filtro de tipo
-                        if (!quantities.count && !filterQty) {
-                            quantities.count = 1; // Contar como 1 unidade se não há contagem explícita
-                        }
-
-                        quantificationResults.elements.push(quantities);
-
-                        // Agregar totais
-                        quantificationResults.totals.volume += quantities.volume;
-                        quantificationResults.totals.area += quantities.area;
-                        quantificationResults.totals.length += quantities.length;
-                        quantificationResults.totals.count += quantities.count || 1;
-                        quantificationResults.totals.weight += quantities.weight;
+                        quantificationResults.elements.push(elemData);
+                        quantificationResults.totals.total += foundValue;
+                        quantificationResults.totals.count++;
 
                         // Agrupar por tipo
                         if (!quantificationResults.byType.has(ifcType)) {
                             quantificationResults.byType.set(ifcType, {
                                 elements: [],
-                                totals: { volume: 0, area: 0, length: 0, count: 0, weight: 0 }
+                                totals: { total: 0, count: 0 }
                             });
                         }
                         const typeGroup = quantificationResults.byType.get(ifcType);
-                        typeGroup.elements.push(quantities);
-                        typeGroup.totals.volume += quantities.volume;
-                        typeGroup.totals.area += quantities.area;
-                        typeGroup.totals.length += quantities.length;
-                        typeGroup.totals.count += quantities.count || 1;
-                        typeGroup.totals.weight += quantities.weight;
+                        typeGroup.elements.push(elemData);
+                        typeGroup.totals.total += foundValue;
+                        typeGroup.totals.count++;
                     }
 
                 } catch (e) {
-                    // Ignorar erros em elementos individuais
+                    // Ignorar erros
                 }
 
                 processed++;
                 if (processed % 100 === 0) {
-                    showLoading(`Processando elementos... ${processed}/${meshes.length}`,
-                        (processed / meshes.length) * 100);
+                    showLoading(`Processando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
                 }
             }
 
             hideLoading();
             updateQuantificationUI();
-            log(`Quantificação completa: ${quantificationResults.elements.length} elementos`, 'success');
+            log(`Quantificação: ${quantificationResults.totals.count} elementos, Total: ${quantificationResults.totals.total.toFixed(2)}`, 'success');
         }
 
         // Atualizar UI com resultados
         function updateQuantificationUI() {
             const totals = quantificationResults.totals;
+            const paramInfo = selectedParameterInfo || { propName: 'Parâmetro', unit: '' };
 
-            // Atualizar totais no painel
-            const volEl = document.getElementById('total-volume');
-            volEl.textContent = totals.volume > 0 ? `${totals.volume.toFixed(2)} m³` : '-';
-            volEl.classList.toggle('zero', totals.volume === 0);
+            // Mostrar linha do parâmetro
+            const paramRow = document.getElementById('total-param-row');
+            const paramLabel = document.getElementById('total-param-label');
+            const paramValue = document.getElementById('total-param-value');
 
-            const areaEl = document.getElementById('total-area');
-            areaEl.textContent = totals.area > 0 ? `${totals.area.toFixed(2)} m²` : '-';
-            areaEl.classList.toggle('zero', totals.area === 0);
+            if (totals.count > 0) {
+                paramRow.style.display = 'flex';
+                paramLabel.textContent = `📊 ${paramInfo.propName}:`;
+                paramValue.textContent = `${totals.total.toFixed(2)}${paramInfo.unit ? ' ' + paramInfo.unit : ''}`;
+            } else {
+                paramRow.style.display = 'none';
+            }
 
-            const lenEl = document.getElementById('total-length');
-            lenEl.textContent = totals.length > 0 ? `${totals.length.toFixed(2)} m` : '-';
-            lenEl.classList.toggle('zero', totals.length === 0);
-
+            // Atualizar contagem
             const countEl = document.getElementById('total-count');
-            countEl.textContent = totals.count > 0 ? `${Math.round(totals.count)} un` : '-';
+            countEl.textContent = totals.count > 0 ? `${totals.count} elementos` : '-';
             countEl.classList.toggle('zero', totals.count === 0);
 
-            const weightEl = document.getElementById('total-weight');
-            weightEl.textContent = totals.weight > 0 ? `${totals.weight.toFixed(2)} kg` : '-';
-            weightEl.classList.toggle('zero', totals.weight === 0);
+            // Mostrar total
+            const sumRow = document.getElementById('total-sum-row');
+            const sumEl = document.getElementById('total-sum');
+            if (totals.count > 0) {
+                sumRow.style.display = 'flex';
+                sumEl.textContent = `${totals.total.toFixed(4)}${paramInfo.unit ? ' ' + paramInfo.unit : ''}`;
+            } else {
+                sumRow.style.display = 'none';
+            }
 
             // Habilitar botões
             const hasResults = quantificationResults.elements.length > 0;
@@ -2553,21 +2655,29 @@
             const modal = document.getElementById('quantification-modal');
             const tbody = document.getElementById('quantification-table-body');
             const summary = document.getElementById('quantification-summary-text');
+            const paramInfo = selectedParameterInfo || { propName: 'Valor', unit: '' };
 
             tbody.innerHTML = '';
 
+            // Atualizar cabeçalho da tabela
+            const thead = modal.querySelector('thead tr');
+            thead.innerHTML = `
+                <th>ID</th>
+                <th>Tipo IFC</th>
+                <th>Nome</th>
+                <th class="number">${paramInfo.propName}${paramInfo.unit ? ' (' + paramInfo.unit + ')' : ''}</th>
+            `;
+
             // Resumo
             summary.textContent = `${quantificationResults.elements.length} elementos | ` +
-                `${quantificationResults.byType.size} tipos`;
+                `${quantificationResults.byType.size} tipos | Total: ${quantificationResults.totals.total.toFixed(2)}${paramInfo.unit ? ' ' + paramInfo.unit : ''}`;
 
             // Renderizar tabela agrupada por tipo
             quantificationResults.byType.forEach((group, ifcType) => {
                 // Header do tipo
                 const headerRow = document.createElement('tr');
                 headerRow.className = 'type-header';
-                headerRow.innerHTML = `
-                    <td colspan="7">${ifcType} (${group.elements.length} elementos)</td>
-                `;
+                headerRow.innerHTML = `<td colspan="4">${ifcType} (${group.elements.length} elementos)</td>`;
                 tbody.appendChild(headerRow);
 
                 // Elementos do tipo
@@ -2577,12 +2687,8 @@
                         <td>#${elem.expressID}</td>
                         <td>${elem.ifcType}</td>
                         <td>${elem.name}</td>
-                        <td class="number">${elem.volume > 0 ? elem.volume.toFixed(4) : '-'}</td>
-                        <td class="number">${elem.area > 0 ? elem.area.toFixed(4) : '-'}</td>
-                        <td class="number">${elem.length > 0 ? elem.length.toFixed(4) : '-'}</td>
-                        <td class="number">${elem.weight > 0 ? elem.weight.toFixed(4) : '-'}</td>
+                        <td class="number">${elem.value.toFixed(4)}</td>
                     `;
-                    // Clicar na linha seleciona o elemento
                     row.style.cursor = 'pointer';
                     row.addEventListener('click', () => highlightQuantificationElement(elem.mesh));
                     tbody.appendChild(row);
@@ -2592,11 +2698,8 @@
                 const subtotalRow = document.createElement('tr');
                 subtotalRow.className = 'subtotal';
                 subtotalRow.innerHTML = `
-                    <td colspan="3">Subtotal ${ifcType}</td>
-                    <td class="number">${group.totals.volume > 0 ? group.totals.volume.toFixed(2) : '-'}</td>
-                    <td class="number">${group.totals.area > 0 ? group.totals.area.toFixed(2) : '-'}</td>
-                    <td class="number">${group.totals.length > 0 ? group.totals.length.toFixed(2) : '-'}</td>
-                    <td class="number">${group.totals.weight > 0 ? group.totals.weight.toFixed(2) : '-'}</td>
+                    <td colspan="3">Subtotal ${ifcType} (${group.totals.count} elem.)</td>
+                    <td class="number">${group.totals.total.toFixed(2)}</td>
                 `;
                 tbody.appendChild(subtotalRow);
             });
@@ -2605,11 +2708,8 @@
             const totalRow = document.createElement('tr');
             totalRow.className = 'grand-total';
             totalRow.innerHTML = `
-                <td colspan="3">TOTAL GERAL</td>
-                <td class="number">${quantificationResults.totals.volume.toFixed(2)} m³</td>
-                <td class="number">${quantificationResults.totals.area.toFixed(2)} m²</td>
-                <td class="number">${quantificationResults.totals.length.toFixed(2)} m</td>
-                <td class="number">${quantificationResults.totals.weight.toFixed(2)} kg</td>
+                <td colspan="3">TOTAL GERAL (${quantificationResults.totals.count} elem.)</td>
+                <td class="number">${quantificationResults.totals.total.toFixed(2)}${paramInfo.unit ? ' ' + paramInfo.unit : ''}</td>
             `;
             tbody.appendChild(totalRow);
 
@@ -2621,19 +2721,16 @@
             document.getElementById('quantification-modal').classList.remove('active');
         }
 
-        // Destacar elemento na cena (a partir da tabela de quantificação)
+        // Destacar elemento na cena
         function highlightQuantificationElement(mesh) {
             if (!mesh) return;
 
-            // Limpar seleção anterior
             clearSelection(false);
 
-            // Selecionar novo elemento
             selectedMesh = mesh;
             originalMaterial = mesh.material;
             mesh.material = selectionMaterial;
 
-            // Centralizar câmera
             const box = new THREE.Box3().setFromObject(mesh);
             const center = new THREE.Vector3();
             box.getCenter(center);
@@ -2648,37 +2745,36 @@
                 return;
             }
 
+            const paramInfo = selectedParameterInfo || { propName: 'Valor', unit: '', setName: '' };
+            const paramHeader = `${paramInfo.propName}${paramInfo.unit ? ' (' + paramInfo.unit + ')' : ''}`;
+
             // Cabeçalho
-            let csv = 'ID;Tipo IFC;Nome;Volume (m³);Área (m²);Comprimento (m);Contagem;Peso (kg)\n';
+            let csv = `ID;Tipo IFC;Nome;${paramHeader}\n`;
 
             // Dados por elemento agrupados por tipo
             quantificationResults.byType.forEach((group, ifcType) => {
                 for (const elem of group.elements) {
-                    csv += `${elem.expressID};${elem.ifcType};"${elem.name}";`;
-                    csv += `${elem.volume.toFixed(4)};${elem.area.toFixed(4)};`;
-                    csv += `${elem.length.toFixed(4)};${Math.round(elem.count)};${elem.weight.toFixed(4)}\n`;
+                    csv += `${elem.expressID};${elem.ifcType};"${elem.name}";${elem.value.toFixed(4)}\n`;
                 }
                 // Subtotal
-                csv += `;SUBTOTAL ${ifcType};;${group.totals.volume.toFixed(2)};`;
-                csv += `${group.totals.area.toFixed(2)};${group.totals.length.toFixed(2)};`;
-                csv += `${Math.round(group.totals.count)};${group.totals.weight.toFixed(2)}\n`;
+                csv += `;SUBTOTAL ${ifcType} (${group.totals.count} elem.);;${group.totals.total.toFixed(2)}\n`;
             });
 
             // Total geral
-            csv += `;TOTAL GERAL;;${quantificationResults.totals.volume.toFixed(2)};`;
-            csv += `${quantificationResults.totals.area.toFixed(2)};`;
-            csv += `${quantificationResults.totals.length.toFixed(2)};`;
-            csv += `${Math.round(quantificationResults.totals.count)};`;
-            csv += `${quantificationResults.totals.weight.toFixed(2)}\n`;
+            csv += `;TOTAL GERAL (${quantificationResults.totals.count} elem.);;${quantificationResults.totals.total.toFixed(2)}\n`;
 
-            // Criar download (com BOM para Excel)
+            // Info do parâmetro
+            csv += `\n;Parâmetro:;${paramInfo.propName};${paramInfo.setName}\n`;
+
+            // Criar download
             const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const date = new Date().toISOString().slice(0, 10);
             const safeModelName = modelName.replace(/[^a-zA-Z0-9]/g, '_');
-            a.download = `quantificacao_${safeModelName}_${date}.csv`;
+            const safePropName = paramInfo.propName.replace(/[^a-zA-Z0-9]/g, '_');
+            a.download = `quantificacao_${safeModelName}_${safePropName}_${date}.csv`;
             a.click();
             URL.revokeObjectURL(url);
 
@@ -3905,8 +4001,12 @@
         document.getElementById('filter-ifc-type').addEventListener('change', (e) => {
             quantificationFilter.ifcType = e.target.value || null;
         });
-        document.getElementById('filter-quantity-type').addEventListener('change', (e) => {
-            quantificationFilter.quantityType = e.target.value || null;
+        document.getElementById('filter-parameter').addEventListener('change', (e) => {
+            quantificationFilter.parameter = e.target.value || null;
+        });
+        document.getElementById('btn-discover-params').addEventListener('click', async () => {
+            const params = await discoverAvailableParameters();
+            populateParameterDropdown(params);
         });
         document.getElementById('btn-calc-quantification').addEventListener('click', calculateQuantification);
         document.getElementById('btn-view-details').addEventListener('click', openQuantificationModal);
