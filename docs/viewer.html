@@ -1459,6 +1459,11 @@
         let discoveredParameters = [];  // Parâmetros descobertos no modelo
         let selectedParameterInfo = null;  // Info do parâmetro selecionado {setName, propName, unit}
 
+        // OTIMIZAÇÃO 3 - Caches para quantificação
+        let cachedMeshList = null;                    // Cache da lista de meshes
+        let meshParameterCache = new Map();           // expressID → Map<"setName|propName", value>
+        let meshTypeCache = new Map();                // expressID → {ifcType, elementName, modelID}
+
         // Logger
         function log(msg, type = 'info') {
             const debug = document.getElementById('debug');
@@ -2797,7 +2802,34 @@
 
         // ==================== QUANTIFICAÇÃO PARA ORÇAMENTO ====================
 
+        // OTIMIZAÇÃO 3.1: Cache de meshes - evita traverse() duplicado
+        function getCachedMeshList() {
+            if (cachedMeshList && cachedMeshList.length > 0) {
+                return cachedMeshList;
+            }
+            if (!currentModel) return [];
+
+            cachedMeshList = [];
+            currentModel.traverse(child => {
+                if (child.isMesh && meshToExpressID.has(child)) {
+                    cachedMeshList.push(child);
+                }
+            });
+            log(`Cache de meshes: ${cachedMeshList.length} meshes`, 'info');
+            return cachedMeshList;
+        }
+
+        // Limpar todos os caches de quantificação
+        function clearQuantificationCache() {
+            cachedMeshList = null;
+            meshParameterCache.clear();
+            meshTypeCache.clear();
+            discoveredParameters = [];
+            log('Caches de quantificação limpos', 'info');
+        }
+
         // Descobrir todos os parâmetros numéricos disponíveis no modelo
+        // OTIMIZAÇÃO 3: Agora popula meshParameterCache e meshTypeCache durante a descoberta
         async function discoverAvailableParameters() {
             if (!currentModel) {
                 log('Nenhum modelo carregado', 'warning');
@@ -2807,76 +2839,114 @@
             log('Descobrindo parâmetros disponíveis...', 'info');
             showLoading('Analisando parâmetros do modelo...', 0);
 
-            const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+            const WebIFC = cachedWebIFC || await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
             const parameterMap = new Map(); // Map<"setName|propName", {info}>
 
-            // Coletar meshes
-            const meshes = [];
-            currentModel.traverse(child => {
-                if (child.isMesh && meshToExpressID.has(child)) {
-                    meshes.push(child);
-                }
-            });
+            // OTIMIZAÇÃO 3.1: Usar cache de meshes
+            const meshes = getCachedMeshList();
 
+            // OTIMIZAÇÃO 3.2 & 3.4: Limpar caches antes de popular
+            meshParameterCache.clear();
+            meshTypeCache.clear();
+
+            const BATCH_SIZE = 50;
             let processed = 0;
-            for (const mesh of meshes) {
-                const expressID = meshToExpressID.get(mesh);
-                const modelID = meshToModelID.get(mesh) ?? currentModelID;
 
-                try {
-                    const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
+            // OTIMIZAÇÃO 3.3: Processar em batches paralelos
+            for (let i = 0; i < meshes.length; i += BATCH_SIZE) {
+                const batch = meshes.slice(i, i + BATCH_SIZE);
 
-                    // Processar QuantitySets
-                    for (const qset of props.quantitySets) {
-                        for (const prop of qset.properties) {
-                            const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
-                            if (!isNaN(numValue) && numValue !== 0) {
-                                const key = `${qset.name}|${prop.name}`;
-                                if (!parameterMap.has(key)) {
-                                    parameterMap.set(key, {
-                                        setName: qset.name,
-                                        propName: prop.name,
+                // Processar batch em paralelo
+                await Promise.all(batch.map(async (mesh) => {
+                    const expressID = meshToExpressID.get(mesh);
+                    const modelID = meshToModelID.get(mesh) ?? currentModelID;
+
+                    try {
+                        const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
+
+                        // OTIMIZAÇÃO 3.4: Cachear tipo IFC e nome do elemento
+                        if (props.element) {
+                            const ifcType = getIFCTypeName(props.element?.type);
+                            const elementName = props.element?.Name?.value || props.element?.Name || '-';
+                            meshTypeCache.set(expressID, { ifcType, elementName, modelID });
+                        }
+
+                        // OTIMIZAÇÃO 3.2: Cachear TODOS os valores de parâmetros por mesh
+                        const paramValues = new Map();
+
+                        // Processar QuantitySets
+                        for (const qset of props.quantitySets) {
+                            for (const prop of qset.properties) {
+                                const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                                if (!isNaN(numValue) && numValue !== 0) {
+                                    const key = `${qset.name}|${prop.name}`;
+
+                                    // Cachear valor para este mesh
+                                    paramValues.set(key, {
+                                        value: numValue,
                                         unit: prop.unit || '',
-                                        quantityType: prop.quantityType || null,
-                                        count: 0,
-                                        source: 'QuantitySet',
-                                        sampleValue: numValue
+                                        source: 'QuantitySet'
                                     });
+
+                                    // Registrar parâmetro no mapa global
+                                    if (!parameterMap.has(key)) {
+                                        parameterMap.set(key, {
+                                            setName: qset.name,
+                                            propName: prop.name,
+                                            unit: prop.unit || '',
+                                            quantityType: prop.quantityType || null,
+                                            count: 0,
+                                            source: 'QuantitySet',
+                                            sampleValue: numValue
+                                        });
+                                    }
+                                    parameterMap.get(key).count++;
                                 }
-                                parameterMap.get(key).count++;
                             }
                         }
-                    }
 
-                    // Processar PropertySets
-                    for (const pset of props.propertySets) {
-                        for (const prop of pset.properties) {
-                            const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
-                            if (!isNaN(numValue) && numValue !== 0) {
-                                const key = `${pset.name}|${prop.name}`;
-                                if (!parameterMap.has(key)) {
-                                    parameterMap.set(key, {
-                                        setName: pset.name,
-                                        propName: prop.name,
+                        // Processar PropertySets
+                        for (const pset of props.propertySets) {
+                            for (const prop of pset.properties) {
+                                const numValue = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                                if (!isNaN(numValue) && numValue !== 0) {
+                                    const key = `${pset.name}|${prop.name}`;
+
+                                    // Cachear valor para este mesh
+                                    paramValues.set(key, {
+                                        value: numValue,
                                         unit: prop.unit || '',
-                                        quantityType: null,
-                                        count: 0,
-                                        source: 'PropertySet',
-                                        sampleValue: numValue
+                                        source: 'PropertySet'
                                     });
+
+                                    // Registrar parâmetro no mapa global
+                                    if (!parameterMap.has(key)) {
+                                        parameterMap.set(key, {
+                                            setName: pset.name,
+                                            propName: prop.name,
+                                            unit: prop.unit || '',
+                                            quantityType: null,
+                                            count: 0,
+                                            source: 'PropertySet',
+                                            sampleValue: numValue
+                                        });
+                                    }
+                                    parameterMap.get(key).count++;
                                 }
-                                parameterMap.get(key).count++;
                             }
                         }
-                    }
-                } catch (e) {
-                    // Ignorar erros
-                }
 
-                processed++;
-                if (processed % 50 === 0) {
-                    showLoading(`Analisando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
-                }
+                        // Salvar cache de parâmetros para este mesh
+                        meshParameterCache.set(expressID, paramValues);
+
+                    } catch (e) {
+                        // Ignorar erros
+                    }
+                }));
+
+                // Atualizar progresso após cada batch
+                processed = Math.min(i + BATCH_SIZE, meshes.length);
+                showLoading(`Analisando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
             }
 
             hideLoading();
@@ -2884,7 +2954,7 @@
             // Converter para array e ordenar por quantidade de ocorrências
             discoveredParameters = Array.from(parameterMap.values()).sort((a, b) => b.count - a.count);
 
-            log(`Descobertos ${discoveredParameters.length} parâmetros numéricos`, 'success');
+            log(`✓ Descobertos ${discoveredParameters.length} parâmetros numéricos (${meshParameterCache.size} meshes cacheados)`, 'success');
             return discoveredParameters;
         }
 
@@ -2905,7 +2975,7 @@
             }
         }
 
-        // Calcular quantificação baseada no parâmetro selecionado
+        // OTIMIZAÇÃO 3: Calcular quantificação usando CACHES (sem reprocessamento!)
         async function calculateQuantification() {
             if (!currentModel) {
                 log('Nenhum modelo carregado', 'warning');
@@ -2920,6 +2990,7 @@
             }
 
             const [setName, propName] = selectedParam.split('|');
+            const paramKey = `${setName}|${propName}`;
 
             // Encontrar info do parâmetro selecionado
             selectedParameterInfo = discoveredParameters.find(p => p.setName === setName && p.propName === propName);
@@ -2927,6 +2998,7 @@
                 selectedParameterInfo = { setName, propName, unit: '' };
             }
 
+            const startTime = performance.now();
             log(`Calculando: ${propName} (${setName})...`, 'info');
             showLoading('Calculando quantificação...', 0);
 
@@ -2937,25 +3009,32 @@
                 byType: new Map()
             };
 
-            const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
             const filterType = quantificationFilter.ifcType;
 
-            // Iterar meshes
-            const meshes = [];
-            currentModel.traverse(child => {
-                if (child.isMesh && meshToExpressID.has(child)) {
-                    meshes.push(child);
-                }
-            });
+            // OTIMIZAÇÃO 3.1: Usar cache de meshes ao invés de traverse()
+            const meshes = getCachedMeshList();
 
-            let processed = 0;
-            for (const mesh of meshes) {
-                const expressID = meshToExpressID.get(mesh);
-                const modelID = meshToModelID.get(mesh) ?? currentModelID;
+            // Verificar se temos o cache de parâmetros populado
+            const hasCacheData = meshParameterCache.size > 0;
 
-                try {
-                    const element = ifcAPI.GetLine(modelID, expressID, true);
-                    const ifcType = getIFCTypeName(element?.type);
+            if (hasCacheData) {
+                // CAMINHO RÁPIDO: Usar caches populados na descoberta
+                log(`Usando cache: ${meshParameterCache.size} meshes cacheados`, 'info');
+
+                let processed = 0;
+                for (const mesh of meshes) {
+                    const expressID = meshToExpressID.get(mesh);
+                    const modelID = meshToModelID.get(mesh) ?? currentModelID;
+
+                    // OTIMIZAÇÃO 3.4: Usar cache de tipos IFC
+                    let ifcType = 'Unknown';
+                    let elementName = '-';
+
+                    if (meshTypeCache.has(expressID)) {
+                        const typeInfo = meshTypeCache.get(expressID);
+                        ifcType = typeInfo.ifcType;
+                        elementName = typeInfo.elementName;
+                    }
 
                     // Filtrar por tipo IFC se especificado
                     if (filterType && !ifcType.toUpperCase().includes(filterType)) {
@@ -2963,30 +3042,75 @@
                         continue;
                     }
 
-                    const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
-                    const elementName = element?.Name?.value || element?.Name || '-';
+                    // OTIMIZAÇÃO 3.2: Usar cache de parâmetros - O(1)!
+                    if (meshParameterCache.has(expressID)) {
+                        const paramValues = meshParameterCache.get(expressID);
 
-                    let foundValue = null;
+                        if (paramValues.has(paramKey)) {
+                            const cachedData = paramValues.get(paramKey);
+                            const foundValue = cachedData.value;
 
-                    // Buscar em QuantitySets
-                    for (const qset of props.quantitySets) {
-                        if (qset.name !== setName) continue;
-                        for (const prop of qset.properties) {
-                            if (prop.name !== propName) continue;
-                            const value = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
-                            if (!isNaN(value)) {
-                                foundValue = value;
-                                break;
+                            const elemData = {
+                                expressID,
+                                modelID,
+                                ifcType,
+                                name: elementName,
+                                value: foundValue,
+                                mesh: mesh
+                            };
+
+                            quantificationResults.elements.push(elemData);
+                            quantificationResults.totals.total += foundValue;
+                            quantificationResults.totals.count++;
+
+                            // Agrupar por tipo
+                            if (!quantificationResults.byType.has(ifcType)) {
+                                quantificationResults.byType.set(ifcType, {
+                                    elements: [],
+                                    totals: { total: 0, count: 0 }
+                                });
                             }
+                            const typeGroup = quantificationResults.byType.get(ifcType);
+                            typeGroup.elements.push(elemData);
+                            typeGroup.totals.total += foundValue;
+                            typeGroup.totals.count++;
                         }
-                        if (foundValue !== null) break;
                     }
 
-                    // Buscar em PropertySets se não encontrou
-                    if (foundValue === null) {
-                        for (const pset of props.propertySets) {
-                            if (pset.name !== setName) continue;
-                            for (const prop of pset.properties) {
+                    processed++;
+                    if (processed % 500 === 0) {
+                        showLoading(`Processando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
+                    }
+                }
+            } else {
+                // CAMINHO FALLBACK: Se não há cache, processar normalmente (primeira vez sem descoberta)
+                log('Sem cache disponível, processando dados...', 'warning');
+                const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+
+                let processed = 0;
+                for (const mesh of meshes) {
+                    const expressID = meshToExpressID.get(mesh);
+                    const modelID = meshToModelID.get(mesh) ?? currentModelID;
+
+                    try {
+                        const element = ifcAPI.GetLine(modelID, expressID, true);
+                        const ifcType = getIFCTypeName(element?.type);
+
+                        // Filtrar por tipo IFC se especificado
+                        if (filterType && !ifcType.toUpperCase().includes(filterType)) {
+                            processed++;
+                            continue;
+                        }
+
+                        const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
+                        const elementName = element?.Name?.value || element?.Name || '-';
+
+                        let foundValue = null;
+
+                        // Buscar em QuantitySets
+                        for (const qset of props.quantitySets) {
+                            if (qset.name !== setName) continue;
+                            for (const prop of qset.properties) {
                                 if (prop.name !== propName) continue;
                                 const value = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
                                 if (!isNaN(value)) {
@@ -2996,49 +3120,66 @@
                             }
                             if (foundValue !== null) break;
                         }
-                    }
 
-                    // Se encontrou valor, adicionar ao resultado
-                    if (foundValue !== null) {
-                        const elemData = {
-                            expressID,
-                            modelID,
-                            ifcType,
-                            name: elementName,
-                            value: foundValue,
-                            mesh: mesh
-                        };
-
-                        quantificationResults.elements.push(elemData);
-                        quantificationResults.totals.total += foundValue;
-                        quantificationResults.totals.count++;
-
-                        // Agrupar por tipo
-                        if (!quantificationResults.byType.has(ifcType)) {
-                            quantificationResults.byType.set(ifcType, {
-                                elements: [],
-                                totals: { total: 0, count: 0 }
-                            });
+                        // Buscar em PropertySets se não encontrou
+                        if (foundValue === null) {
+                            for (const pset of props.propertySets) {
+                                if (pset.name !== setName) continue;
+                                for (const prop of pset.properties) {
+                                    if (prop.name !== propName) continue;
+                                    const value = typeof prop.value === 'number' ? prop.value : parseFloat(prop.value);
+                                    if (!isNaN(value)) {
+                                        foundValue = value;
+                                        break;
+                                    }
+                                }
+                                if (foundValue !== null) break;
+                            }
                         }
-                        const typeGroup = quantificationResults.byType.get(ifcType);
-                        typeGroup.elements.push(elemData);
-                        typeGroup.totals.total += foundValue;
-                        typeGroup.totals.count++;
+
+                        // Se encontrou valor, adicionar ao resultado
+                        if (foundValue !== null) {
+                            const elemData = {
+                                expressID,
+                                modelID,
+                                ifcType,
+                                name: elementName,
+                                value: foundValue,
+                                mesh: mesh
+                            };
+
+                            quantificationResults.elements.push(elemData);
+                            quantificationResults.totals.total += foundValue;
+                            quantificationResults.totals.count++;
+
+                            // Agrupar por tipo
+                            if (!quantificationResults.byType.has(ifcType)) {
+                                quantificationResults.byType.set(ifcType, {
+                                    elements: [],
+                                    totals: { total: 0, count: 0 }
+                                });
+                            }
+                            const typeGroup = quantificationResults.byType.get(ifcType);
+                            typeGroup.elements.push(elemData);
+                            typeGroup.totals.total += foundValue;
+                            typeGroup.totals.count++;
+                        }
+
+                    } catch (e) {
+                        // Ignorar erros
                     }
 
-                } catch (e) {
-                    // Ignorar erros
-                }
-
-                processed++;
-                if (processed % 100 === 0) {
-                    showLoading(`Processando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
+                    processed++;
+                    if (processed % 100 === 0) {
+                        showLoading(`Processando... ${processed}/${meshes.length}`, (processed / meshes.length) * 100);
+                    }
                 }
             }
 
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
             hideLoading();
             updateQuantificationUI();
-            log(`Quantificação: ${quantificationResults.totals.count} elementos, Total: ${quantificationResults.totals.total.toFixed(2)}`, 'success');
+            log(`✓ Quantificação: ${quantificationResults.totals.count} elementos, Total: ${quantificationResults.totals.total.toFixed(2)} (${elapsed}s)`, 'success');
         }
 
         // Atualizar UI com resultados
@@ -3224,6 +3365,7 @@
                 // Iniciar timer
                 loadingStartTime = Date.now();
                 clearMaterialCache();  // Limpar cache de materiais anterior
+                clearQuantificationCache();  // OTIMIZAÇÃO 3: Limpar caches de quantificação
 
                 modelName = name;
                 document.getElementById('model-name').textContent = name;
@@ -3453,9 +3595,10 @@
             }
 
             try {
-                // Iniciar timer e limpar cache de materiais
+                // Iniciar timer e limpar caches
                 loadingStartTime = Date.now();
                 clearMaterialCache();
+                clearQuantificationCache();  // OTIMIZAÇÃO 3: Limpar caches de quantificação
 
                 modelName = nomeFederado;
                 document.getElementById('model-name').textContent = `🔗 ${nomeFederado}`;
