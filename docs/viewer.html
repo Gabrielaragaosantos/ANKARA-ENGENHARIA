@@ -1369,9 +1369,17 @@
         let typeToPropertySets = new Map();
         let meshToExpressID = new Map();  // Mapeia mesh -> expressID do elemento IFC
 
+        // OTIMIZAÇÃO 2.3: Lazy Loading de Propriedades
+        // Índice rápido: elementID → [relationIDs] (construído no carregamento)
+        let propertyRelationIndex = new Map();      // elementID → [relationIDs de IFCRELDEFINESBYPROPERTIES]
+        let typeRelationIndex = new Map();          // elementID → [relationIDs de IFCRELDEFINESBYTYPE]
+        let lazyLoadingEnabled = true;              // Flag para habilitar/desabilitar lazy loading
+        let cachedWebIFC = null;                    // Cache do módulo WebIFC para uso no lazy loading
+
         // Suporte a múltiplos modelos (federação)
         let meshToModelID = new Map();       // Mapeia mesh -> modelID (para saber de qual modelo veio)
         let modelPropertyMaps = new Map();   // Mapeia modelID -> { elementToPropertySets, elementToQuantitySets, elementToTypeProperties, typeToPropertySets }
+        let modelRelationIndexes = new Map(); // modelID → { propertyRelationIndex, typeRelationIndex }
 
         // Seleção de elementos
         let selectedMesh = null;
@@ -1929,7 +1937,195 @@
             return result;
         }
 
-        // Construir mapa de propriedades iterando TODAS as relações
+        // OTIMIZAÇÃO 2.3: Construir índice rápido de relações (sem processar propriedades)
+        // Isso é muito mais rápido que buildPropertyMaps() - apenas mapeia elementID → [relationIDs]
+        async function buildRelationIndex(WebIFC, modelID = null) {
+            const targetModelID = modelID ?? currentModelID;
+            log('Construindo índice de relações IFC (modo lazy)...', 'info');
+            const startTime = Date.now();
+
+            // Limpar índices anteriores se for modelo principal
+            if (!modelID) {
+                propertyRelationIndex.clear();
+                typeRelationIndex.clear();
+            }
+
+            // Usar índices específicos para este modelo ou globais
+            const localPropertyIndex = modelID ? new Map() : propertyRelationIndex;
+            const localTypeIndex = modelID ? new Map() : typeRelationIndex;
+
+            // 1. Indexar IFCRELDEFINESBYPROPERTIES (apenas IDs, sem processar conteúdo)
+            try {
+                const relDefinesByPropsIDs = ifcAPI.GetLineIDsWithType(targetModelID, WebIFC.IFCRELDEFINESBYPROPERTIES);
+                for (let i = 0; i < relDefinesByPropsIDs.size(); i++) {
+                    const relID = relDefinesByPropsIDs.get(i);
+                    try {
+                        // Carregar relação com geometria básica apenas
+                        const rel = ifcAPI.GetLine(targetModelID, relID, false);
+                        if (!rel || !rel.RelatedObjects) continue;
+
+                        const relatedObjects = rel.RelatedObjects;
+                        if (!Array.isArray(relatedObjects)) continue;
+
+                        for (const obj of relatedObjects) {
+                            const elementID = obj.value || obj.expressID || obj;
+                            if (!localPropertyIndex.has(elementID)) {
+                                localPropertyIndex.set(elementID, []);
+                            }
+                            localPropertyIndex.get(elementID).push(relID);
+                        }
+                    } catch (e) {}
+                }
+            } catch (e) {
+                log(`Erro ao indexar IFCRELDEFINESBYPROPERTIES: ${e.message}`, 'warning');
+            }
+
+            // 2. Indexar IFCRELDEFINESBYTYPE (apenas IDs)
+            try {
+                const relDefinesByTypeIDs = ifcAPI.GetLineIDsWithType(targetModelID, WebIFC.IFCRELDEFINESBYTYPE);
+                for (let i = 0; i < relDefinesByTypeIDs.size(); i++) {
+                    const relID = relDefinesByTypeIDs.get(i);
+                    try {
+                        const rel = ifcAPI.GetLine(targetModelID, relID, false);
+                        if (!rel || !rel.RelatedObjects) continue;
+
+                        const relatedObjects = rel.RelatedObjects;
+                        if (!Array.isArray(relatedObjects)) continue;
+
+                        for (const obj of relatedObjects) {
+                            const elementID = obj.value || obj.expressID || obj;
+                            if (!localTypeIndex.has(elementID)) {
+                                localTypeIndex.set(elementID, []);
+                            }
+                            localTypeIndex.get(elementID).push(relID);
+                        }
+                    } catch (e) {}
+                }
+            } catch (e) {
+                log(`Erro ao indexar IFCRELDEFINESBYTYPE: ${e.message}`, 'warning');
+            }
+
+            // Se for modelo específico, salvar no mapa de modelos
+            if (modelID) {
+                modelRelationIndexes.set(modelID, {
+                    propertyRelationIndex: localPropertyIndex,
+                    typeRelationIndex: localTypeIndex
+                });
+            }
+
+            const elapsed = Date.now() - startTime;
+            const totalElements = localPropertyIndex.size + localTypeIndex.size;
+            log(`✓ Índice de relações construído: ${totalElements} elementos indexados em ${elapsed}ms`, 'success');
+        }
+
+        // OTIMIZAÇÃO 2.3: Carregar propriedades on-demand para um elemento específico
+        async function loadPropertiesOnDemand(expressID, WebIFC, modelID = null) {
+            const targetModelID = modelID ?? currentModelID;
+
+            // Determinar qual índice usar
+            let localPropertyIndex = propertyRelationIndex;
+            let localTypeIndex = typeRelationIndex;
+            let localElementToPropertySets = elementToPropertySets;
+            let localElementToQuantitySets = elementToQuantitySets;
+            let localElementToTypeProperties = elementToTypeProperties;
+
+            if (modelID && modelRelationIndexes.has(modelID)) {
+                const indexes = modelRelationIndexes.get(modelID);
+                localPropertyIndex = indexes.propertyRelationIndex;
+                localTypeIndex = indexes.typeRelationIndex;
+            }
+
+            if (modelID && modelPropertyMaps.has(modelID)) {
+                const maps = modelPropertyMaps.get(modelID);
+                localElementToPropertySets = maps.elementToPropertySets;
+                localElementToQuantitySets = maps.elementToQuantitySets;
+                localElementToTypeProperties = maps.elementToTypeProperties;
+            }
+
+            // Verificar se já foi carregado (cache hit)
+            if (localElementToPropertySets.has(expressID) || localElementToQuantitySets.has(expressID)) {
+                return; // Já carregado
+            }
+
+            // Carregar propriedades das relações indexadas
+            const relationIDs = localPropertyIndex.get(expressID) || [];
+            for (const relID of relationIDs) {
+                try {
+                    const rel = ifcAPI.GetLine(targetModelID, relID, true);
+                    if (!rel) continue;
+
+                    const propertyDef = rel.RelatingPropertyDefinition;
+                    if (!propertyDef) continue;
+
+                    const psetData = extractPropertySetData(propertyDef, WebIFC);
+                    if (!psetData || psetData.properties.length === 0) continue;
+
+                    if (psetData.isQuantitySet) {
+                        if (!localElementToQuantitySets.has(expressID)) {
+                            localElementToQuantitySets.set(expressID, []);
+                        }
+                        // Evitar duplicatas
+                        const existing = localElementToQuantitySets.get(expressID);
+                        if (!existing.find(p => p.name === psetData.name)) {
+                            existing.push(psetData);
+                        }
+                    } else {
+                        if (!localElementToPropertySets.has(expressID)) {
+                            localElementToPropertySets.set(expressID, []);
+                        }
+                        const existing = localElementToPropertySets.get(expressID);
+                        if (!existing.find(p => p.name === psetData.name)) {
+                            existing.push(psetData);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // Carregar propriedades de tipo
+            const typeRelIDs = localTypeIndex.get(expressID) || [];
+            for (const relID of typeRelIDs) {
+                try {
+                    const rel = ifcAPI.GetLine(targetModelID, relID, true);
+                    if (!rel) continue;
+
+                    const relatingType = rel.RelatingType;
+                    if (!relatingType) continue;
+
+                    const typeID = relatingType.value || relatingType.expressID || relatingType;
+                    let typeObj = relatingType;
+                    if (typeof typeID === 'number') {
+                        try {
+                            typeObj = ifcAPI.GetLine(targetModelID, typeID, true);
+                        } catch (e) {}
+                    }
+
+                    const typeName = typeObj?.Name?.value || typeObj?.Name || getIFCTypeName(typeObj?.type);
+                    const typePsets = [];
+
+                    if (typeObj?.HasPropertySets && Array.isArray(typeObj.HasPropertySets)) {
+                        for (const pset of typeObj.HasPropertySets) {
+                            const psetData = extractPropertySetData(pset, WebIFC);
+                            if (psetData && psetData.properties.length > 0) {
+                                psetData.isTypeProperty = true;
+                                psetData.name = `${psetData.name} (IFC Type)`;
+                                typePsets.push(psetData);
+                            }
+                        }
+                    }
+
+                    if (!localElementToTypeProperties.has(expressID)) {
+                        localElementToTypeProperties.set(expressID, []);
+                    }
+                    localElementToTypeProperties.get(expressID).push({
+                        typeID: typeID,
+                        typeName: typeName,
+                        psets: typePsets
+                    });
+                } catch (e) {}
+            }
+        }
+
+        // Construir mapa de propriedades iterando TODAS as relações (modo completo - legado)
         async function buildPropertyMaps(WebIFC) {
             log('Construindo mapa de propriedades IFC...', 'info');
 
@@ -2331,7 +2527,8 @@
 
         // Obter todas as propriedades de um elemento
         // modelID é opcional - se fornecido, usa mapas específicos do modelo (federação)
-        function getAllPropertiesForElement(expressID, WebIFC, modelID = null) {
+        // OTIMIZAÇÃO 2.3: Agora é async para suportar lazy loading
+        async function getAllPropertiesForElement(expressID, WebIFC, modelID = null) {
             const result = {
                 expressID: expressID,
                 element: null,
@@ -2342,6 +2539,11 @@
 
             // Determinar qual modelID usar
             const targetModelID = modelID ?? currentModelID;
+
+            // OTIMIZAÇÃO 2.3: Carregar propriedades on-demand se lazy loading estiver habilitado
+            if (lazyLoadingEnabled && WebIFC) {
+                await loadPropertiesOnDemand(expressID, WebIFC, modelID);
+            }
 
             // Verificar se temos mapas específicos para este modelo (modo federado)
             let localElementToPropertySets = elementToPropertySets;
@@ -2622,7 +2824,7 @@
                 const modelID = meshToModelID.get(mesh) ?? currentModelID;
 
                 try {
-                    const props = getAllPropertiesForElement(expressID, WebIFC, modelID);
+                    const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
 
                     // Processar QuantitySets
                     for (const qset of props.quantitySets) {
@@ -2761,7 +2963,7 @@
                         continue;
                     }
 
-                    const props = getAllPropertiesForElement(expressID, WebIFC, modelID);
+                    const props = await getAllPropertiesForElement(expressID, WebIFC, modelID);
                     const elementName = element?.Name?.value || element?.Name || '-';
 
                     let foundValue = null;
@@ -3121,26 +3323,25 @@
 
                 const modelGroup = new THREE.Group();
                 let meshCount = 0;
-                let processedMeshes = 0;
                 meshToExpressID.clear();
 
-                // Contar total de meshes primeiro (aproximado)
-                let totalGeoms = 0;
+                // OTIMIZAÇÃO 2.2: Adicionar grupo à cena ANTES do processamento
+                // Isso permite visualização progressiva (streaming visual)
+                scene.add(modelGroup);
+                currentModel = modelGroup;
+
+                // OTIMIZAÇÃO 2.1: Estimar total baseado no tamanho do arquivo
+                // (evita processamento duplo do StreamAllMeshes)
+                const estimatedTotal = Math.max(500, Math.floor(data.length / 3000));
+                log(`Estimativa inicial: ~${estimatedTotal} geometrias`, 'info');
+
+                // Processar geometrias em uma única passagem
                 ifcAPI.StreamAllMeshes(modelID, (mesh) => {
-                    totalGeoms += mesh.geometries.size();
-                });
-
-                // Reabrir o modelo para processar
-                ifcAPI.CloseModel(modelID);
-                const modelID2 = ifcAPI.OpenModel(data);
-                currentModelID = modelID2;
-
-                ifcAPI.StreamAllMeshes(modelID2, (mesh) => {
                     const expressID = mesh.expressID;
                     const geoms = mesh.geometries;
                     for (let i = 0; i < geoms.size(); i++) {
                         const pg = geoms.get(i);
-                        const geom = ifcAPI.GetGeometry(modelID2, pg.geometryExpressID);
+                        const geom = ifcAPI.GetGeometry(modelID, pg.geometryExpressID);
                         const vData = ifcAPI.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
                         const iData = ifcAPI.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
 
@@ -3163,7 +3364,7 @@
                             bufferGeom.setIndex(Array.from(iData));
                         }
 
-                        // OTIMIZAÇÃO: Usar cache de materiais
+                        // OTIMIZAÇÃO Fase 1: Usar cache de materiais
                         const c = pg.color;
                         const mat = getOrCreateMaterial(c.x, c.y, c.z, c.w);
 
@@ -3175,14 +3376,13 @@
 
                         modelGroup.add(threeMesh);
                         meshCount++;
-                        processedMeshes++;
                         geom.delete();
 
-                        // Atualizar progresso periodicamente
-                        if (processedMeshes % 100 === 0 && totalGeoms > 0) {
-                            const geomProgress = 55 + (processedMeshes / totalGeoms) * 30;
-                            document.getElementById('step-geometry-text').textContent = `Processando geometrias... (${processedMeshes}/${totalGeoms})`;
-                            showLoading(`Geometrias: ${processedMeshes}/${totalGeoms}`, geomProgress);
+                        // Atualizar progresso periodicamente (a cada 100 meshes)
+                        if (meshCount % 100 === 0) {
+                            const geomProgress = Math.min(85, 55 + (meshCount / estimatedTotal) * 30);
+                            document.getElementById('step-geometry-text').textContent = `Processando geometrias... (${meshCount})`;
+                            showLoading(`Geometrias: ${meshCount}`, geomProgress);
                         }
                     }
                 });
@@ -3191,9 +3391,6 @@
                 setLoadingStep('step-geometry', 'completed');
                 document.getElementById('step-geometry-text').textContent = `Geometrias processadas (${meshCount} meshes)`;
                 showLoading('Finalizando...', 90);
-
-                scene.add(modelGroup);
-                currentModel = modelGroup;
 
                 const box = new THREE.Box3().setFromObject(modelGroup);
                 const center = new THREE.Vector3();
@@ -3220,12 +3417,15 @@
                 document.getElementById('quantification-panel').classList.add('active');
                 updateModelBounds();
 
-                // ========== ETAPA 4: INDEXAÇÃO DE PROPRIEDADES ==========
+                // ========== ETAPA 4: INDEXAÇÃO DE PROPRIEDADES (LAZY LOADING) ==========
                 setLoadingStep('step-properties', 'active');
-                showLoading('Indexando propriedades IFC...', 95);
+                showLoading('Indexando relações IFC...', 95);
 
                 const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                await buildPropertyMaps(WebIFC);
+                cachedWebIFC = WebIFC;  // Salvar para uso no lazy loading
+
+                // OTIMIZAÇÃO 2.3: Usar índice rápido ao invés de processar todas as propriedades
+                await buildRelationIndex(WebIFC);
 
                 setLoadingStep('step-properties', 'completed');
 
@@ -3264,6 +3464,7 @@
                 // Limpar mapas de federação anteriores
                 meshToModelID.clear();
                 modelPropertyMaps.clear();
+                modelRelationIndexes.clear();
 
                 // Criar grupo principal para todos os modelos
                 const mainGroup = new THREE.Group();
@@ -3271,8 +3472,13 @@
                 let totalMeshCount = 0;
                 let modelsFromCache = 0;
 
+                // OTIMIZAÇÃO 2.2: Adicionar grupo à cena antes do processamento (streaming visual)
+                scene.add(mainGroup);
+                currentModel = mainGroup;
+
                 // Importar WebIFC uma vez para usar em todas as indexações
                 const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                cachedWebIFC = WebIFC;  // Salvar para uso no lazy loading
 
                 // Carregar cada modelo
                 for (let i = 0; i < modelos.length; i++) {
@@ -3369,9 +3575,17 @@
                         totalMeshCount += meshCount;
                         log(`${modelo.nome}: ${meshCount} meshes`, 'success');
 
-                        // Indexar propriedades DESTE modelo específico
-                        showLoading(`Indexando propriedades de ${modelo.nome}...`, (i / modelos.length) * 80 + 10);
-                        await buildPropertyMapsForModel(modelID, WebIFC);
+                        // OTIMIZAÇÃO 2.3: Usar índice rápido ao invés de processar todas as propriedades
+                        showLoading(`Indexando relações de ${modelo.nome}...`, (i / modelos.length) * 80 + 10);
+                        await buildRelationIndex(WebIFC, modelID);
+
+                        // Inicializar mapas vazios para este modelo (serão preenchidos on-demand)
+                        modelPropertyMaps.set(modelID, {
+                            elementToPropertySets: new Map(),
+                            elementToQuantitySets: new Map(),
+                            elementToTypeProperties: new Map(),
+                            typeToPropertySets: new Map()
+                        });
 
                         // Manter último modelID para compatibilidade com modo individual
                         currentModelID = modelID;
@@ -3384,11 +3598,7 @@
 
                 showLoading('Finalizando federação...', 90);
 
-                // Adicionar grupo principal à cena
-                scene.add(mainGroup);
-                currentModel = mainGroup;
-
-                // Ajustar câmera
+                // Ajustar câmera (mainGroup já foi adicionado à cena no início)
                 const box = new THREE.Box3().setFromObject(mainGroup);
                 const center = new THREE.Vector3();
                 const size = new THREE.Vector3();
@@ -3590,8 +3800,8 @@
                         };
 
                         // Obter todas as propriedades usando o modelID correto
-                        const WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
-                        const allProps = getAllPropertiesForElement(expressID, WebIFC, modelID);
+                        const WebIFC = cachedWebIFC || await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.46/web-ifc-api.js');
+                        const allProps = await getAllPropertiesForElement(expressID, WebIFC, modelID);
 
                         // Armazenar propriedades e renderizar preview
                         currentElementProps = allProps;
